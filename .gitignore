@@ -25,6 +25,8 @@ docs/_preview.png
 *.aab
 *.keystore
 *.jks
+# CI 固定签名密钥：入库以保证签名恒定（覆盖安装/自动更新可用）
+!/android/ci-signing/debug.keystore
 /target-ui/
 /.android-test/
 /.worktrees/

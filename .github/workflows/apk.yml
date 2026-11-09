@@ -18,14 +18,14 @@
 #   非 tag 构建读 Cargo.toml。
 #
 # 签名（关键！Android 覆盖安装要求签名一致）：
-#   - tag 构建必须配置仓库 Secret ANDROID_KEYSTORE_BASE64（keystore 文件的
-#     base64），缺失时直接失败——绝不能换密钥静默发布，否则所有已装用户
-#     无法覆盖安装，卸载重装还会丢 identity/session。
-#   - 可选 Secret：ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS /
-#     ANDROID_KEY_PASSWORD（默认 android / androiddebugkey / android）。
-#   - 非 tag 构建无 Secret 时生成一次性调试密钥，产物仅供冒烟安装。
-#   注意：本地脚本默认用 android/.signing/local-test.keystore（不入库）。
-#     若历史 APK 均由该密钥签名，请把它 base64 后配成上述 Secret，保持连续。
+#   - 默认使用仓库内置固定密钥 android/ci-signing/debug.keystore
+#     （alias=mrt，store/key 口令均为 mrt-ci-2026）。它随仓库固定不变，
+#     因此每次构建签名一致，覆盖安装与客户端自动更新都可用。
+#     这是内部工具阶段的折中做法：密钥是公开的，仅防误装、不防伪造。
+#   - 需要换成正式密钥时，配置以下 Secret 即可覆盖（无需改工作流）：
+#     ANDROID_KEYSTORE_BASE64（keystore 的 base64，必填）+
+#     ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD。
+#   - 换密钥会让所有已装用户无法覆盖安装（需卸载重装），发布后不要随意更换。
 #
 # 构建流程是 android/build.ps1 的 Linux 移植：NDK 29 交叉编译 + ELF 16KB
 # 对齐检查 + javac/d8 + aapt2 + zipalign -P 16 + apksigner 签名校验。
@@ -162,7 +162,7 @@ jobs:
             && zip -q -X ../unsigned.apk classes.dex "lib/$ABI/libmiempires_run_tool.so" )
           "$BT/zipalign" -f -P 16 4 "$out/unsigned.apk" "$out/aligned.apk"
 
-      - name: 准备签名密钥（tag 构建必须有 Secret；否则一次性调试密钥）
+      - name: 准备签名密钥（仓库内置固定密钥；可用 Secret 覆盖）
         env:
           KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KS_PASS_SECR: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -178,17 +178,12 @@ jobs:
             echo "KS_ALIAS=${KS_ALIAS_SECR:-androiddebugkey}" >> "$GITHUB_ENV"
             echo "KEY_PASS=${KEY_PASS_SECR:-android}" >> "$GITHUB_ENV"
             echo "使用仓库 Secret 签名密钥"
-          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            echo "::error::tag 构建必须配置 Secret ANDROID_KEYSTORE_BASE64（keystore 的 base64）。签名不一致会导致所有已装用户无法覆盖安装；本地历史密钥为 android/.signing/local-test.keystore，请将其 base64 后配置。"
-            exit 1
           else
-            keytool -genkeypair -keystore "$ks" -storepass android -keypass android \
-              -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname 'CN=Android Debug,O=Android,C=US'
-            echo "KS_PASS=android" >> "$GITHUB_ENV"
-            echo "KS_ALIAS=androiddebugkey" >> "$GITHUB_ENV"
-            echo "KEY_PASS=android" >> "$GITHUB_ENV"
-            echo "::warning::未配置签名 Secret，使用一次性调试密钥（产物仅供冒烟安装，不可覆盖安装到已发布版本）"
+            cp android/ci-signing/debug.keystore "$ks"
+            echo "KS_PASS=mrt-ci-2026" >> "$GITHUB_ENV"
+            echo "KS_ALIAS=mrt" >> "$GITHUB_ENV"
+            echo "KEY_PASS=mrt-ci-2026" >> "$GITHUB_ENV"
+            echo "使用仓库内置固定调试密钥（签名恒定，可覆盖安装与自动更新）"
           fi
 
       - name: 签名与验证
