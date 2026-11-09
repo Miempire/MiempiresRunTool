@@ -1,0 +1,42 @@
+/target
+Cargo.lock.bak
+nekosportsworldtool.log*
+*.log.old
+
+# 杩愯鏃舵暟鎹紙鍚細璇?鍑嵁锛岀姝㈠叆搴擄級
+/session.json
+/config.json
+/identity.json
+/points_cache.json
+/semester_result.json
+/rank_result.json
+/.idea/
+docs/_preview.png
+/docs
+/fixtures
+/ai_sports.json
+/obs_*.json
+/rec_all.tmp
+/msg.txt
+/.superpowers/
+/android/build/
+/android/.signing/
+*.apk
+*.aab
+*.keystore
+*.jks
+/target-ui/
+/.android-test/
+/.worktrees/
+
+# 鎵撳寘杈撳嚭锛堝惈 exe 涓庤繍琛屾暟鎹紝绂佹鍏ュ簱锛?/dist
+# 鏈湴宸ュ叿鐩綍
+/.mimosa/
+/.zcode/
+
+# 鑷姩鏇存柊鏇挎崲娈嬬暀
+*.exe.old
+*.exe.new
+apis.doc
+apis.files/
+apis.md
