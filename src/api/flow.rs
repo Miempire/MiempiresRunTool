@@ -504,30 +504,6 @@ pub fn run_full_flow(
     })
 }
 
-/// AI 提交流（UI 线程用）。
-pub fn run_ai_submit(
-    client: &mut ApiClient,
-    sport_id: i64,
-    mode: super::ai::AiMode,
-    log: &mut dyn FnMut(&str),
-) -> Result<Value, String> {
-    log(&format!("[ai] 提交 sportId={sport_id} mode={mode:?}…"));
-    let biz = super::ai::upload(client, sport_id, mode, None)?;
-    log("√ [ai] 提交成功");
-    Ok(biz)
-}
-
-/// AI 列表（UI 线程用）。
-pub fn run_ai_list(
-    client: &mut ApiClient,
-    log: &mut dyn FnMut(&str),
-) -> Result<Vec<super::ai::AiSport>, String> {
-    log("[ai] 拉取项目列表…");
-    let list = super::ai::fetch_list(client)?;
-    log(&format!("√ [ai] {} 个项目", list.len()));
-    Ok(list)
-}
-
 /// 记录列表（UI 线程用）。
 pub fn run_records(
     client: &mut ApiClient,
