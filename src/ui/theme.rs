@@ -1,40 +1,45 @@
-//! 极简二次元双主题：蓝紫（默认）/ 纯白（跑步弹窗）。
+//! 极简二次元双主题：默认蓝紫（Ocean）/ 粉紫（Sakura）/ 纯白（跑步弹窗）。
 
 use eframe::egui::{self, Color32, Rounding, Stroke};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThemeKind {
-    /// 蓝紫（默认）。
-    Violet,
-    /// 纯白（跑步弹窗内使用）。
+    /// 蓝紫渐变（默认）。
+    Ocean,
+    /// 粉紫。
+    Sakura,
+    /// 跑步弹窗内部使用：纯白底，强调色跟随 Ocean。
     RunWhite,
 }
 
 impl ThemeKind {
     pub fn parse(value: &str) -> Self {
-        match value {
-            "run_white" => Self::RunWhite,
-            _ => Self::Violet,
+        if value.eq_ignore_ascii_case("sakura") {
+            Self::Sakura
+        } else {
+            Self::Ocean
         }
     }
 
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Violet => "violet",
+            Self::Ocean => "ocean",
+            Self::Sakura => "sakura",
             Self::RunWhite => "run_white",
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Violet => "蓝紫渐变",
-            Self::RunWhite => "纯白（跑步弹窗）",
+            Self::Ocean => "蓝紫渐变",
+            Self::Sakura => "粉紫",
+            Self::RunWhite => "纯白",
         }
     }
 
     pub fn palette(self) -> Palette {
         match self {
-            Self::Violet => Palette {
+            Self::Ocean => Palette {
                 bg: Color32::from_rgb(245, 243, 255),
                 card: Color32::from_rgb(255, 255, 255),
                 accent: Color32::from_rgb(120, 98, 235),
@@ -49,6 +54,22 @@ impl ThemeKind {
                 map_outline: Color32::from_rgb(120, 98, 235),
                 map_vertex: Color32::from_rgb(255, 255, 255),
                 map_building: Color32::from_rgb(244, 240, 252),
+            },
+            Self::Sakura => Palette {
+                bg: Color32::from_rgb(255, 247, 250),
+                card: Color32::from_rgb(255, 255, 255),
+                accent: Color32::from_rgb(232, 118, 170),
+                accent_soft: Color32::from_rgb(255, 226, 234),
+                text: Color32::from_rgb(61, 43, 51),
+                text_dim: Color32::from_rgb(154, 124, 136),
+                border: Color32::from_rgb(242, 215, 225),
+                ok: Color32::from_rgb(86, 181, 138),
+                warn: Color32::from_rgb(232, 165, 84),
+                err: Color32::from_rgb(224, 96, 112),
+                map_road: Color32::from_rgb(240, 214, 223),
+                map_outline: Color32::from_rgb(232, 118, 170),
+                map_vertex: Color32::from_rgb(255, 255, 255),
+                map_building: Color32::from_rgb(248, 238, 242),
             },
             Self::RunWhite => Palette {
                 bg: Color32::from_rgb(255, 255, 255),
@@ -164,7 +185,7 @@ pub fn ghost_button(ui: &mut egui::Ui, palette: &Palette, text: &str) -> egui::R
     ui.add(button)
 }
 
-/// 跑步弹窗切换纯白主题：bg/border 换成纯白底，强调色保留蓝紫。
+/// 跑步弹窗专用纯白主题（内部使用，不在 auth 面板暴露）。
 pub fn run_white_palette(global: &Palette) -> Palette {
     Palette {
         bg: Color32::from_rgb(255, 255, 255),
