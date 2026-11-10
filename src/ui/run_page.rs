@@ -326,7 +326,7 @@ pub fn draw_dialog(app: &mut App, ctx: &egui::Context) {
     if !app.run.open {
         return;
     }
-    let palette = theme::run_white_palette(&app.palette);
+    let palette = app.palette;
     let title = match app.run.step {
         RunStep::PickRoad => "跑步 · 选择路网",
         RunStep::Preview => "跑步 · 预览",
