@@ -252,14 +252,18 @@ fn draw_gradient_button(
 
 fn mix_color(a: Color32, b: Color32, t: f32) -> Color32 {
     let t = t.clamp(0.0, 1.0);
-    let a = a.to_array();
-    let b = b.to_array();
     Color32::from_rgba_unmultiplied(
-        (a[0] as f32 + (b[0] as f32 - a[0] as f32) * t) as u8,
-        (a[1] as f32 + (b[1] as f32 - a[1] as f32) * t) as u8,
-        (a[2] as f32 + (b[2] as f32 - a[2] as f32) * t) as u8,
-        (a[3] as f32 + (b[3] as f32 - a[3] as f32) * t) as u8,
+        lerp(a.r(), b.r(), t),
+        lerp(a.g(), b.g(), t),
+        lerp(a.b(), b.b(), t),
+        lerp(a.a(), b.a(), t),
     )
+}
+
+fn lerp(a: u8, b: u8, t: f32) -> u8 {
+    let a = a as f32;
+    let b = b as f32;
+    (a + (b - a) * t).round().clamp(0.0, 255.0) as u8
 }
 
 /// 次要描边按钮。
