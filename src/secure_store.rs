@@ -9,8 +9,7 @@
 
 use std::path::PathBuf;
 
-use cbc::cipher::{block_padding::Pkcs7, BlockModeDecrypt, BlockModeEncrypt, KeyIvInit};
-use sha2::{Digest, Sha256};
+use cbc::cipher::{KeyIvInit, block_padding::Pkcs7};
 
 type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;

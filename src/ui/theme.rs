@@ -1,4 +1,4 @@
-//! 极简二次元双主题：默认蓝紫（Ocean）/ 粉紫（Sakura）/ 纯白（跑步弹窗）。
+﻿//! 极简二次元双主题：默认蓝紫（Ocean）/ 粉紫（Sakura）/ 纯白（跑步弹窗）。
 
 use eframe::egui::{self, Color32, Rounding, Stroke};
 
@@ -118,20 +118,20 @@ impl Palette {
         visuals.window_fill = self.card;
         visuals.extreme_bg_color = self.card;
         visuals.faint_bg_color = self.accent_soft;
-        visuals.window_stroke = Stroke::new(1.0, self.border);
+        visuals.window_stroke = Stroke::new(1.0_f32, self.border);
         visuals.selection.bg_fill = self.accent_soft;
-        visuals.selection.stroke = Stroke::new(1.0, self.accent);
+        visuals.selection.stroke = Stroke::new(1.0_f32, self.accent);
         visuals.widgets.noninteractive.bg_fill = self.card;
-        visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, self.text_dim);
+        visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, self.text_dim);
         visuals.widgets.noninteractive.rounding = Rounding::same(12.0);
         visuals.widgets.inactive.bg_fill = self.accent_soft;
-        visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, self.text);
+        visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, self.text);
         visuals.widgets.inactive.rounding = Rounding::same(12.0);
         visuals.widgets.hovered.bg_fill = self.accent_soft;
-        visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, self.text);
+        visuals.widgets.hovered.fg_stroke = Stroke::new(1.0_f32, self.text);
         visuals.widgets.hovered.rounding = Rounding::same(12.0);
         visuals.widgets.active.bg_fill = self.accent;
-        visuals.widgets.active.fg_stroke = Stroke::new(1.0, Color32::WHITE);
+        visuals.widgets.active.fg_stroke = Stroke::new(1.0_f32, Color32::WHITE);
         visuals.widgets.active.rounding = Rounding::same(12.0);
         visuals.window_shadow = egui::epaint::Shadow {
             offset: egui::vec2(0.0, 6.0),
@@ -157,7 +157,7 @@ impl Palette {
 pub fn card_frame(palette: &Palette) -> egui::Frame {
     egui::Frame::none()
         .fill(palette.card)
-        .stroke(Stroke::new(1.0, palette.border))
+        .stroke(Stroke::new(1.0_f32, palette.border))
         .rounding(Rounding::same(16.0))
         .inner_margin(egui::Margin::same(14.0))
 }
@@ -179,7 +179,7 @@ pub fn primary_button(ui: &mut egui::Ui, palette: &Palette, text: &str) -> egui:
 pub fn ghost_button(ui: &mut egui::Ui, palette: &Palette, text: &str) -> egui::Response {
     let button = egui::Button::new(egui::RichText::new(text).color(palette.accent).size(15.0))
         .fill(palette.card)
-        .stroke(Stroke::new(1.0, palette.border))
+        .stroke(Stroke::new(1.0_f32, palette.border))
         .rounding(Rounding::same(14.0))
         .min_size(egui::vec2(0.0, 40.0));
     ui.add(button)

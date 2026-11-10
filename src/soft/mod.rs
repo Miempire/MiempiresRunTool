@@ -5,5 +5,3 @@ pub mod model;
 pub mod roads;
 pub mod session;
 pub mod update;
-
-pub use session::SoftSession;

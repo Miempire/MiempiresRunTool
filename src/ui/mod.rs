@@ -1,4 +1,4 @@
-//! 应用主界面：顶部栏 + 两个标签（跑步 / 运动记录）+ 各种弹窗。
+﻿//! 应用主界面：顶部栏 + 两个标签（跑步 / 运动记录）+ 各种弹窗。
 //!
 //! 设计原则：极简、双层信息（主界面只留入口，配置全部收进弹窗）。
 
@@ -928,7 +928,7 @@ impl App {
                     if let Some(session) = self.session.clone() {
                         egui::Frame::none()
                             .fill(palette.card)
-                            .stroke(egui::Stroke::new(1.0, palette.border))
+                            .stroke(egui::Stroke::new(1.0_f32, palette.border))
                             .rounding(egui::Rounding::same(18.0))
                             .inner_margin(egui::Margin::same(18.0))
                             .show(ui, |ui| {

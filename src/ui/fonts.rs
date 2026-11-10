@@ -1,4 +1,4 @@
-//! 中文字体安装。
+﻿//! 中文字体安装。
 //!
 //! 启动时按平台加载系统中文字体并注入 egui：Windows 优先微软雅黑（msyh.ttc），
 //! 失败再试 simhei / simsun；macOS 优先 PingFang.ttc，失败再试 Hiragino Sans GB /

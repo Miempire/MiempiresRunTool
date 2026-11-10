@@ -1,4 +1,4 @@
-//! 手机端布局与输入 helpers（Android 使用原生输入框，避免软键盘遮挡）。
+﻿//! 手机端布局与输入 helpers（Android 使用原生输入框，避免软键盘遮挡）。
 
 use eframe::egui;
 use std::hash::Hash;

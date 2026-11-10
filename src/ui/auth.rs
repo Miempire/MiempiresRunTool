@@ -1,4 +1,4 @@
-//! 账号相关弹窗：软件账号登录/注册、账号与设置面板、官方账号登录。
+﻿//! 账号相关弹窗：软件账号登录/注册、账号与设置面板、官方账号登录。
 //!
 //! 登录态由 `soft::session` 加密落盘；这里只负责输入与展示。
 
@@ -375,7 +375,7 @@ pub fn draw_account_sheet(app: &mut App, ctx: &egui::Context) {
                             RichText::new("退出登录").color(palette.err).size(15.0),
                         )
                         .fill(palette.card)
-                        .stroke(egui::Stroke::new(1.0, palette.border))
+                        .stroke(egui::Stroke::new(1.0_f32, palette.border))
                         .rounding(egui::Rounding::same(14.0));
                         if ui.add_sized([width, 42.0], button).clicked() {
                             logout = true;

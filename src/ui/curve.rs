@@ -1,4 +1,4 @@
-//! 可拖动控制点的曲线编辑器（配速 / 海拔）。
+﻿//! 可拖动控制点的曲线编辑器（配速 / 海拔）。
 //!
 //! 带坐标轴与刻度：横轴是完成进度（0~100%），纵轴是秒每公里或海拔米数。
 //! 拖动圆点即可改变曲线；双击空白处加点，右键点删除。
@@ -159,7 +159,7 @@ impl CurveEditor {
         painter.rect_stroke(
             outer,
             egui::Rounding::same(8.0),
-            Stroke::new(1.0, palette.border),
+            Stroke::new(1.0_f32, palette.border),
         );
 
         let plot = Rect::from_min_max(
@@ -184,7 +184,7 @@ impl CurveEditor {
         };
 
         // 网格与坐标轴
-        let grid = Stroke::new(1.0, palette.accent_soft);
+        let grid = Stroke::new(1.0_f32, palette.accent_soft);
         for step in 0..=4 {
             let x = step as f64 / 4.0;
             let top = to_screen(x, self.y_max);
@@ -214,11 +214,11 @@ impl CurveEditor {
         }
         painter.line_segment(
             [plot.left_bottom(), plot.right_bottom()],
-            Stroke::new(1.0, palette.border),
+            Stroke::new(1.0_f32, palette.border),
         );
         painter.line_segment(
             [plot.left_top(), plot.left_bottom()],
-            Stroke::new(1.0, palette.border),
+            Stroke::new(1.0_f32, palette.border),
         );
 
         // 曲线
@@ -228,7 +228,7 @@ impl CurveEditor {
             .map(|(x, y)| to_screen(*x, *y))
             .collect();
         if line.len() >= 2 {
-            painter.add(egui::Shape::line(line.clone(), Stroke::new(2.0, palette.accent)));
+            painter.add(egui::Shape::line(line.clone(), Stroke::new(2.0_f32, palette.accent)));
         }
 
         // 交互命中检测
@@ -315,7 +315,7 @@ impl CurveEditor {
             let active = self.selected == Some(index) || self.drag == Some(index);
             let radius = if active { 6.5 } else { 5.0 };
             painter.circle_filled(center, radius, palette.accent);
-            painter.circle_stroke(center, radius, Stroke::new(1.5, Color32::WHITE));
+            painter.circle_stroke(center, radius, Stroke::new(1.5_f32, Color32::WHITE));
         }
 
         // 选中点的数值气泡
@@ -334,7 +334,7 @@ impl CurveEditor {
             painter.rect_stroke(
                 bubble,
                 egui::Rounding::same(4.0),
-                Stroke::new(1.0, palette.accent),
+                Stroke::new(1.0_f32, palette.accent),
             );
             painter.text(
                 bubble.center(),

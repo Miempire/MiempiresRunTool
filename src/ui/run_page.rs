@@ -1,4 +1,4 @@
-//! 跑步主页与跑步弹窗。
+﻿//! 跑步主页与跑步弹窗。
 //!
 //! 主界面只保留一个入口；「选路网 → 预览 → 编辑轮廓 → 参数 → 运行 → 完成」
 //! 全部收在弹窗里，避免把繁杂配置暴露给新用户。
@@ -929,7 +929,7 @@ fn draw_edit(app: &mut App, ui: &mut egui::Ui) {
         let delete =
             egui::Button::new(RichText::new("删除顶点").size(15.0).color(palette.accent))
                 .fill(palette.card)
-                .stroke(egui::Stroke::new(1.0, palette.border))
+                .stroke(egui::Stroke::new(1.0_f32, palette.border))
                 .rounding(egui::Rounding::same(14.0))
                 .min_size(egui::vec2(0.0, 40.0));
         if ui.add_enabled(selected.is_some(), delete).clicked() {
@@ -1092,7 +1092,7 @@ fn draw_done(app: &mut App, ui: &mut egui::Ui) {
         RichText::new("再跑一次").size(15.0).color(palette.accent),
     )
     .fill(palette.card)
-    .stroke(egui::Stroke::new(1.0, palette.border))
+    .stroke(egui::Stroke::new(1.0_f32, palette.border))
     .rounding(egui::Rounding::same(14.0));
     if ui.add_sized([width, 42.0], again).clicked() {
         app.run.result = None;
@@ -1131,7 +1131,7 @@ fn draw_map(app: &mut App, ui: &mut egui::Ui, editable: bool) {
     painter.rect_stroke(
         rect,
         egui::Rounding::same(14.0),
-        egui::Stroke::new(1.0, palette.border),
+        egui::Stroke::new(1.0_f32, palette.border),
     );
 
     let mode = app.run.mode;
@@ -1267,7 +1267,7 @@ fn draw_map(app: &mut App, ui: &mut egui::Ui, editable: bool) {
             painter.circle_stroke(
                 screen,
                 radius,
-                egui::Stroke::new(1.5, palette.map_outline),
+                egui::Stroke::new(1.5_f32, palette.map_outline),
             );
         }
     }
@@ -1277,7 +1277,7 @@ fn draw_map(app: &mut App, ui: &mut egui::Ui, editable: bool) {
     for (index, (lat, lon)) in state.checkpoints.iter().enumerate() {
         let screen = state.map.to_screen(rect, *lat, *lon);
         painter.circle_filled(screen, 7.5, checkpoint);
-        painter.circle_stroke(screen, 7.5, egui::Stroke::new(1.5, Color32::WHITE));
+        painter.circle_stroke(screen, 7.5, egui::Stroke::new(1.5_f32, Color32::WHITE));
         painter.text(
             screen,
             egui::Align2::CENTER_CENTER,

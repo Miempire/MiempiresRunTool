@@ -1,4 +1,4 @@
-//! 运动记录页：官方账号登录后展示跑步记录。
+﻿//! 运动记录页：官方账号登录后展示跑步记录。
 
 use chrono::TimeZone;
 use eframe::egui;
