@@ -293,13 +293,21 @@ pub fn draw_account_sheet(app: &mut App, ctx: &egui::Context) {
                                     .size(12.0)
                                     .color(palette.ok),
                                 );
+                                ui.horizontal(|ui| {
+                                    if theme::ghost_button(ui, &palette, "切换账号").clicked() {
+                                        open_official = true;
+                                    }
+                                    if theme::ghost_button(ui, &palette, "退出登录").clicked() {
+                                        app.official_logout();
+                                    }
+                                });
                             }
                             None => {
                                 ui.label(dim("未登录（跑步提交与运动记录需要）", &palette));
+                                if theme::ghost_button(ui, &palette, "登录官方账号").clicked() {
+                                    open_official = true;
+                                }
                             }
-                        }
-                        if theme::ghost_button(ui, &palette, "登录 / 切换官方账号").clicked() {
-                            open_official = true;
                         }
                     });
 

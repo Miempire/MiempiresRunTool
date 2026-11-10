@@ -147,17 +147,22 @@ fn remember(road: &RoadInfo) {
     let _ = save_cache(&cache);
 }
 
-/// 把服务端下发的城市与中心坐标写入官方身份锚点（BD09）。
-pub fn apply_anchor(road: &RoadInfo) -> Result<(), String> {
+/// 计算路网锚点（BD09）。不写身份文件，供预览时拉取检查点。
+pub fn anchor_bd09(road: &RoadInfo) -> Result<(f64, f64), String> {
     if road.center_lat.abs() < 0.0001 || road.center_lon.abs() < 0.0001 {
         return Err("该路网未配置中心坐标，请联系管理员补充".into());
     }
     let sys = road.coord_sys.trim().to_ascii_uppercase();
-    let (lat, lon) = match sys.as_str() {
+    Ok(match sys.as_str() {
         "WGS84" => crate::track::geom::wgs84_to_bd09(road.center_lat, road.center_lon),
         "GCJ02" => crate::track::geom::gcj02_to_bd09(road.center_lat, road.center_lon),
         _ => (road.center_lat, road.center_lon),
-    };
+    })
+}
+
+/// 把服务端下发的城市与中心坐标写入官方身份锚点（BD09）。
+pub fn apply_anchor(road: &RoadInfo) -> Result<(), String> {
+    let (lat, lon) = anchor_bd09(road)?;
     let mut identity = crate::api::model::load_identity();
     identity.city = if road.city.trim().is_empty() {
         identity.city
@@ -169,11 +174,12 @@ pub fn apply_anchor(road: &RoadInfo) -> Result<(), String> {
     crate::api::model::save_identity(&identity)
 }
 
-/// 选定路网：写入 OSM 路径 + 跑道模式 + 城市锚点。
-pub fn activate(road: &RoadInfo, path: &Path) -> Result<(), String> {
+/// 选定路网：写入 OSM 路径 + 跑步模式 + 城市锚点。
+/// `mode` 为 "road"（真实路网路由）或 "track"（跑道绕圈）。
+pub fn activate(road: &RoadInfo, path: &Path, mode: &str) -> Result<(), String> {
     let mut config = crate::api::model::load_config();
     config.osm_path = path.to_string_lossy().into_owned();
-    config.route_mode = "track".into();
+    config.route_mode = if mode == "road" { "road".into() } else { "track".into() };
     crate::api::model::save_config(&config)?;
     apply_anchor(road)
 }

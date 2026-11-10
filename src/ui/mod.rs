@@ -48,6 +48,8 @@ pub enum Msg {
     RoadUse(Result<(bool, i64), ApiError>),
     RunLog(String),
     RunDone(Result<run_page::RunOutcome, String>),
+    /// 必经点/检查点拉取结果（BD09 坐标）。
+    Checkpoints(Result<Vec<(f64, f64)>, String>),
     Records(Result<Vec<RecordRow>, String>),
     OfficialLogin(Result<Session, String>),
     Update(Result<Option<ReleaseInfo>, ApiError>),
@@ -254,6 +256,18 @@ impl App {
         self.records = RecordsUi::default();
     }
 
+    /// 退出官方账号：清除本地加密会话与运动记录缓存。
+    pub fn official_logout(&mut self) {
+        self.official.session = None;
+        self.official.username.clear();
+        self.official.password.clear();
+        self.official.error = None;
+        self.records = RecordsUi::default();
+        crate::api::model::clear_session();
+        crate::api::model::clear_points_cache();
+        self.log("已退出官方账号");
+    }
+
     pub fn upload_logs(&mut self) {
         if self.uploading_logs || log_upload::pending_count() == 0 {
             return;
@@ -414,6 +428,10 @@ impl App {
                             validation: Ok(()),
                             map: map::MapState::default(),
                             last_map_key: String::new(),
+                            candidate_page: 0,
+                            checkpoints: Vec::new(),
+                            checkpoints_loading: false,
+                            checkpoints_error: None,
                         });
                         self.run.step = run_page::RunStep::Preview;
                         self.run.error = None;
@@ -478,6 +496,20 @@ impl App {
                         self.run.error = Some(message.clone());
                         self.log.push(&format!("失败：{message}"));
                         log_upload::error(&format!("跑步失败：{message}"));
+                    }
+                }
+            }
+            Msg::Checkpoints(result) => {
+                if let Some(preview) = self.run.preview.as_mut() {
+                    preview.checkpoints_loading = false;
+                    match result {
+                        Ok(points) => {
+                            preview.checkpoints = points;
+                            preview.checkpoints_error = None;
+                        }
+                        Err(message) => {
+                            preview.checkpoints_error = Some(message);
+                        }
                     }
                 }
             }
@@ -615,6 +647,43 @@ impl App {
         });
     }
 
+    /// 拉取当前路网锚点附近的必经点/检查点，标注在预览地图上。
+    pub fn load_checkpoints(&mut self) {
+        let Some(preview) = self.run.preview.as_mut() else { return };
+        if preview.checkpoints_loading {
+            return;
+        }
+        let Some(session) = self.official.session.clone() else {
+            preview.checkpoints_error = Some("请先登录官方账号".into());
+            self.official.open = true;
+            return;
+        };
+        let anchor = match crate::soft::roads::anchor_bd09(&preview.road) {
+            Ok((lat, lon)) => match crate::location::Coordinate::new(lat, lon, 0.0) {
+                Ok(c) => c,
+                Err(e) => {
+                    preview.checkpoints_error = Some(e);
+                    return;
+                }
+            },
+            Err(e) => {
+                preview.checkpoints_error = Some(e);
+                return;
+            }
+        };
+        preview.checkpoints_loading = true;
+        preview.checkpoints_error = None;
+        self.spawn(move |tx| {
+            let mut client = crate::api::client::ApiClient::new(
+                crate::api::model::load_identity(),
+                Some(session),
+            );
+            let result = crate::api::points::fetch_points(&mut client, anchor, &mut |_| {})
+                .map(|pts| crate::api::points::points_bd(&pts));
+            let _ = tx.send(Msg::Checkpoints(result));
+        });
+    }
+
     pub fn official_login(&mut self, username: String, password: String) {
         self.official.busy = true;
         self.official.error = None;
@@ -639,7 +708,11 @@ impl App {
             return;
         }
         let Some(token) = self.token() else { return };
-        if crate::road_editor::validate(&preview.network, &preview.preview.outline).is_err() {
+        let mode = self.run.mode;
+        // 跑道模式需要可用轮廓；真实路网模式由必经点/检查点驱动，无需轮廓。
+        if mode == run_page::RunMode::Track
+            && crate::road_editor::validate(&preview.network, &preview.preview.outline).is_err()
+        {
             self.run.error = Some("轮廓不可用，请返回调整或恢复默认".into());
             return;
         }
@@ -658,7 +731,8 @@ impl App {
             return;
         };
 
-        if let Err(error) = crate::soft::roads::activate(&road, &path) {
+        let mode_str = if mode == run_page::RunMode::Road { "road" } else { "track" };
+        if let Err(error) = crate::soft::roads::activate(&road, &path, mode_str) {
             self.run.error = Some(error);
             return;
         }
@@ -733,8 +807,17 @@ impl App {
                 seed: run_id_clone
                     .bytes()
                     .fold(0u64, |acc, b| acc.wrapping_mul(131).wrapping_add(b as u64)),
-                route_mode: crate::track::generate_road::RouteMode::Track,
-                track_outline: outline,
+                route_mode: if mode == run_page::RunMode::Road {
+                    crate::track::generate_road::RouteMode::Road
+                } else {
+                    crate::track::generate_road::RouteMode::Track
+                },
+                // 真实路网模式不使用轮廓；跑道模式传入编辑后的轮廓。
+                track_outline: if mode == run_page::RunMode::Road {
+                    Vec::new()
+                } else {
+                    outline
+                },
                 pace_range: Some((pace - 20.0, pace + 20.0)),
                 must_limit: None,
             };

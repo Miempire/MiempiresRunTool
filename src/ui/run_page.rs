@@ -22,6 +22,24 @@ pub struct RoadsUi {
     pub error: Option<String>,
 }
 
+/// 跑步模式。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunMode {
+    /// 真实道路路由：沿道路依次串联必经点/检查点。
+    Road,
+    /// 跑道绕圈：在选定路网内绕封闭轮廓。
+    Track,
+}
+
+impl RunMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            RunMode::Road => "真实路网",
+            RunMode::Track => "跑道绕圈",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunStep {
     PickRoad,
@@ -40,6 +58,12 @@ pub struct PreviewState {
     pub validation: Result<(), String>,
     pub map: MapState,
     pub last_map_key: String,
+    /// 候选跑道当前页（每页 6 条）。
+    pub candidate_page: usize,
+    /// 必经点/检查点（BD09），加载成功后标注在地图上。
+    pub checkpoints: Vec<(f64, f64)>,
+    pub checkpoints_loading: bool,
+    pub checkpoints_error: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -62,6 +86,8 @@ pub struct RunUi {
     pub pending_start: bool,
     pub distance_km: f64,
     pub pace_sec: f64,
+    /// 跑步模式（真实路网 / 跑道绕圈）。
+    pub mode: RunMode,
     /// 正在拖动的轮廓顶点（仅在编辑页使用）。
     pub drag: Option<usize>,
 }
@@ -82,6 +108,7 @@ impl RunUi {
             pending_start: false,
             distance_km: settings.last_dist_km.clamp(0.5, 21.0),
             pace_sec: settings.last_pace_sec.clamp(170.0, 520.0),
+            mode: RunMode::Track,
             drag: None,
         }
     }
@@ -489,6 +516,24 @@ fn draw_preview(app: &mut App, ui: &mut egui::Ui) {
         ui.label(dim("请先选择路网", &palette));
         return;
     };
+    let page = app
+        .run
+        .preview
+        .as_ref()
+        .map(|state| state.candidate_page)
+        .unwrap_or(0);
+    let (cp_count, cp_loading, cp_error) = app
+        .run
+        .preview
+        .as_ref()
+        .map(|state| {
+            (
+                state.checkpoints.len(),
+                state.checkpoints_loading,
+                state.checkpoints_error.clone(),
+            )
+        })
+        .unwrap_or((0, false, None));
 
     let city = if road.city.trim().is_empty() {
         "未标注城市".to_string()
@@ -501,60 +546,113 @@ fn draw_preview(app: &mut App, ui: &mut egui::Ui) {
             .strong()
             .color(palette.text),
     );
-    ui.label(dim(
-        format!(
+    let subtitle = match app.run.mode {
+        RunMode::Road => format!("{} · 已使用 {} 次", road.author(), road.usage_count),
+        RunMode::Track => format!(
             "{} · 已使用 {} 次 · {} 个顶点 · {:.0} m",
             road.author(),
             road.usage_count,
             vertices,
             length
         ),
+    };
+    ui.label(dim(subtitle, &palette));
+
+    ui.add_space(4.0);
+    ui.horizontal(|ui| {
+        for mode in [RunMode::Road, RunMode::Track] {
+            let active = app.run.mode == mode;
+            let button = egui::Button::new(
+                RichText::new(mode.label()).size(12.5).color(if active {
+                    Color32::WHITE
+                } else {
+                    palette.accent
+                }),
+            )
+            .fill(if active {
+                palette.accent
+            } else {
+                palette.accent_soft
+            })
+            .rounding(egui::Rounding::same(10.0));
+            if ui.add(button).clicked() {
+                app.run.mode = mode;
+            }
+        }
+    });
+    ui.label(dim(
+        match app.run.mode {
+            RunMode::Road => "沿真实道路依次串联必经点与检查点。",
+            RunMode::Track => "在路网内绕封闭跑道，可挑选候选或手动编辑轮廓。",
+        },
         &palette,
     ));
 
-    if candidates.is_empty() {
-        ui.add_space(2.0);
-        ui.label(
-            RichText::new("未识别到封闭跑道，请手动编辑轮廓")
-                .size(12.0)
-                .color(palette.warn),
-        );
-    } else {
-        ui.add_space(2.0);
-        ui.label(dim(
-            format!("自动识别到 {} 条封闭跑道", candidates.len()),
-            &palette,
-        ));
-        let mut choose: Option<usize> = None;
-        ui.horizontal_wrapped(|ui| {
-            for (index, candidate) in candidates.iter().take(6).enumerate() {
-                let active = selected == Some(index);
-                let button = egui::Button::new(
-                    RichText::new(format!("{} · {:.0}m", index + 1, candidate.length_m))
-                        .size(11.5)
-                        .color(if active {
-                            Color32::WHITE
-                        } else {
-                            palette.accent
-                        }),
-                )
-                .fill(if active {
-                    palette.accent
-                } else {
-                    palette.accent_soft
-                })
-                .rounding(egui::Rounding::same(10.0));
-                if ui.add(button).clicked() {
-                    choose = Some(index);
+    if app.run.mode == RunMode::Track {
+        if candidates.is_empty() {
+            ui.add_space(2.0);
+            ui.label(
+                RichText::new("未识别到封闭跑道，请手动编辑轮廓")
+                    .size(12.0)
+                    .color(palette.warn),
+            );
+        } else {
+            let total_pages = ((candidates.len() + 5) / 6).max(1);
+            let page = page.min(total_pages - 1);
+            let start_index = page * 6;
+            ui.add_space(2.0);
+            ui.label(dim(
+                format!(
+                    "自动识别到 {} 条封闭跑道 · 第 {}/{} 页",
+                    candidates.len(),
+                    page + 1,
+                    total_pages
+                ),
+                &palette,
+            ));
+            let mut choose: Option<usize> = None;
+            let mut next_page = false;
+            ui.horizontal_wrapped(|ui| {
+                for (offset, candidate) in
+                    candidates.iter().skip(start_index).take(6).enumerate()
+                {
+                    let index = start_index + offset;
+                    let active = selected == Some(index);
+                    let button = egui::Button::new(
+                        RichText::new(format!("{} · {:.0}m", index + 1, candidate.length_m))
+                            .size(11.5)
+                            .color(if active {
+                                Color32::WHITE
+                            } else {
+                                palette.accent
+                            }),
+                    )
+                    .fill(if active {
+                        palette.accent
+                    } else {
+                        palette.accent_soft
+                    })
+                    .rounding(egui::Rounding::same(10.0));
+                    if ui.add(button).clicked() {
+                        choose = Some(index);
+                    }
                 }
-            }
-        });
-        if let Some(index) = choose {
+                if total_pages > 1 && theme::ghost_button(ui, &palette, "换一批").clicked() {
+                    next_page = true;
+                }
+            });
             if let Some(state) = app.run.preview.as_mut() {
-                road_editor::choose(&mut state.preview, index);
-                state.selected_vertex = None;
-                state.validation =
-                    road_editor::validate(&state.network, &state.preview.outline);
+                state.candidate_page = if next_page {
+                    (page + 1) % total_pages
+                } else {
+                    page
+                };
+                if let Some(index) = choose {
+                    road_editor::choose(&mut state.preview, index);
+                    state.selected_vertex = None;
+                    state.validation =
+                        road_editor::validate(&state.network, &state.preview.outline);
+                }
             }
         }
     }
@@ -563,23 +661,42 @@ fn draw_preview(app: &mut App, ui: &mut egui::Ui) {
     draw_map(app, ui, false);
     ui.add_space(4.0);
 
-    match &validation {
-        Ok(()) if vertices >= 3 => {
-            ui.label(
-                RichText::new("轮廓校验通过")
-                    .size(12.0)
-                    .color(palette.ok),
-            );
+    let mut load_points = false;
+    ui.horizontal(|ui| {
+        if theme::ghost_button(ui, &palette, "加载必经点/检查点").clicked() {
+            load_points = true;
         }
-        Ok(()) => {
-            ui.label(
-                RichText::new("轮廓顶点不足，请编辑后再试")
-                    .size(12.0)
-                    .color(palette.warn),
-            );
+        if cp_loading {
+            ui.spinner();
+        } else if let Some(error) = &cp_error {
+            ui.label(RichText::new(error).size(11.5).color(palette.err));
+        } else if cp_count > 0 {
+            ui.label(dim(format!("已在地图上标注 {} 个检查点", cp_count), &palette));
         }
-        Err(message) => {
-            ui.label(RichText::new(message).size(12.0).color(palette.err));
+    });
+    if load_points {
+        app.load_checkpoints();
+    }
+
+    if app.run.mode == RunMode::Track {
+        match &validation {
+            Ok(()) if vertices >= 3 => {
+                ui.label(
+                    RichText::new("轮廓校验通过")
+                        .size(12.0)
+                        .color(palette.ok),
+                );
+            }
+            Ok(()) => {
+                ui.label(
+                    RichText::new("轮廓顶点不足，请编辑后再试")
+                        .size(12.0)
+                        .color(palette.warn),
+                );
+            }
+            Err(message) => {
+                ui.label(RichText::new(message).size(12.0).color(palette.err));
+            }
         }
     }
 
@@ -611,7 +728,9 @@ fn draw_preview(app: &mut App, ui: &mut egui::Ui) {
         if theme::ghost_button(ui, &palette, "重选路网").clicked() {
             app.run.step = RunStep::PickRoad;
         }
-        if theme::ghost_button(ui, &palette, "编辑轮廓").clicked() {
+        if app.run.mode == RunMode::Track
+            && theme::ghost_button(ui, &palette, "编辑轮廓").clicked()
+        {
             app.run.step = RunStep::Edit;
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -860,6 +979,7 @@ fn draw_map(app: &mut App, ui: &mut egui::Ui, editable: bool) {
         egui::Stroke::new(1.0, palette.border),
     );
 
+    let mode = app.run.mode;
     let Some(state) = app.run.preview.as_mut() else {
         return;
     };
@@ -968,30 +1088,47 @@ fn draw_map(app: &mut App, ui: &mut egui::Ui, editable: bool) {
             .draw_polygon(&painter, rect, building, palette.map_building, 1.0);
     }
 
-    let outline = &state.preview.outline;
-    if outline.len() >= 3 {
-        state
-            .map
-            .draw_polygon(&painter, rect, outline, palette.map_outline, 3.0);
-    } else if outline.len() == 2 {
-        state
-            .map
-            .draw_polyline(&painter, rect, outline, palette.map_outline, 3.0);
+    if mode == RunMode::Track {
+        let outline = &state.preview.outline;
+        if outline.len() >= 3 {
+            state
+                .map
+                .draw_polygon(&painter, rect, outline, palette.map_outline, 3.0);
+        } else if outline.len() == 2 {
+            state
+                .map
+                .draw_polyline(&painter, rect, outline, palette.map_outline, 3.0);
+        }
+        for (index, (lat, lon)) in outline.iter().enumerate() {
+            let selected = state.selected_vertex == Some(index);
+            let radius = if selected { 7.0 } else { 5.0 };
+            let fill = if selected {
+                palette.accent
+            } else {
+                palette.map_vertex
+            };
+            state.map.draw_point(&painter, rect, *lat, *lon, fill, radius);
+            let screen = state.map.to_screen(rect, *lat, *lon);
+            painter.circle_stroke(
+                screen,
+                radius,
+                egui::Stroke::new(1.5, palette.map_outline),
+            );
+        }
     }
-    for (index, (lat, lon)) in outline.iter().enumerate() {
-        let selected = state.selected_vertex == Some(index);
-        let radius = if selected { 7.0 } else { 5.0 };
-        let fill = if selected {
-            palette.accent
-        } else {
-            palette.map_vertex
-        };
-        state.map.draw_point(&painter, rect, *lat, *lon, fill, radius);
+
+    // 必经点/检查点标注（BD09）：橙色圆点 + 序号。
+    let checkpoint = Color32::from_rgb(255, 122, 26);
+    for (index, (lat, lon)) in state.checkpoints.iter().enumerate() {
         let screen = state.map.to_screen(rect, *lat, *lon);
-        painter.circle_stroke(
+        painter.circle_filled(screen, 7.5, checkpoint);
+        painter.circle_stroke(screen, 7.5, egui::Stroke::new(1.5, Color32::WHITE));
+        painter.text(
             screen,
-            radius,
-            egui::Stroke::new(1.5, palette.map_outline),
+            egui::Align2::CENTER_CENTER,
+            format!("{}", index + 1),
+            egui::FontId::proportional(9.0),
+            Color32::WHITE,
         );
     }
 }

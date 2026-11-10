@@ -555,6 +555,11 @@ pub fn save_points_cache(
     write_json("points_cache.json", &doc)
 }
 
+/// 清除必经点/检查点缓存（切换官方账号或城市时使用）。
+pub fn clear_points_cache() {
+    crate::secure_store::remove("points_cache.json");
+}
+
 #[cfg(test)]
 mod points_cache_tests {
     use super::*;
