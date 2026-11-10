@@ -265,7 +265,7 @@ impl App {
         self.records = RecordsUi::default();
         crate::api::model::clear_session();
         crate::api::model::clear_points_cache();
-        self.log("已退出官方账号");
+        self.log.push("已退出官方账号");
     }
 
     pub fn upload_logs(&mut self) {
