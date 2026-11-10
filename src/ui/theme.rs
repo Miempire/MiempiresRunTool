@@ -1,69 +1,76 @@
-//! 极简二次元双主题：粉色（Sakura）/ 蓝色（Ocean）。
+//! 极简二次元双主题：蓝紫（默认，带渐变主按钮）/ 纯白（跑步弹窗内切换）。
+//!
+//! Palette 存的是离散颜色，渐变主按钮由 `gradient_button` 用 painter 绘制。
 
 use eframe::egui::{self, Color32, Rounding, Stroke};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThemeKind {
-    Sakura,
-    Ocean,
+    /// 蓝紫渐变主色（全局默认）。
+    Violet,
+    /// 跑界面纯白底，强调色仍保留蓝紫。
+    RunWhite,
 }
 
 impl ThemeKind {
     pub fn parse(value: &str) -> Self {
-        if value.eq_ignore_ascii_case("ocean") {
-            Self::Ocean
-        } else {
-            Self::Sakura
+        match value {
+            "ocean" | "violet" => Self::Violet,
+            _ => Self::Violet,
         }
     }
 
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Sakura => "sakura",
-            Self::Ocean => "ocean",
+            Self::Violet => "violet",
+            Self::RunWhite => "run_white",
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Sakura => "粉色",
-            Self::Ocean => "蓝色",
+            Self::Violet => "蓝紫渐变",
+            Self::RunWhite => "纯白（跑步弹窗）",
         }
     }
 
     pub fn palette(self) -> Palette {
         match self {
-            Self::Sakura => Palette {
-                bg: Color32::from_rgb(255, 247, 250),
+            Self::Violet => Palette {
+                bg: Color32::from_rgb(245, 243, 255),
                 card: Color32::from_rgb(255, 255, 255),
-                accent: Color32::from_rgb(255, 143, 177),
-                accent_soft: Color32::from_rgb(255, 226, 234),
-                text: Color32::from_rgb(61, 43, 51),
-                text_dim: Color32::from_rgb(154, 124, 136),
-                border: Color32::from_rgb(242, 215, 225),
+                accent: Color32::from_rgb(120, 98, 235),
+                accent_soft: Color32::from_rgb(234, 229, 255),
+                text: Color32::from_rgb(38, 32, 58),
+                text_dim: Color32::from_rgb(130, 118, 162),
+                border: Color32::from_rgb(223, 216, 247),
                 ok: Color32::from_rgb(86, 181, 138),
                 warn: Color32::from_rgb(232, 165, 84),
                 err: Color32::from_rgb(224, 96, 112),
-                map_road: Color32::from_rgb(240, 214, 223),
-                map_outline: Color32::from_rgb(255, 143, 177),
+                map_road: Color32::from_rgb(228, 222, 248),
+                map_outline: Color32::from_rgb(120, 98, 235),
                 map_vertex: Color32::from_rgb(255, 255, 255),
-                map_building: Color32::from_rgb(248, 238, 242),
+                map_building: Color32::from_rgb(244, 240, 252),
+                grad_from: Color32::from_rgb(120, 98, 235),
+                grad_to: Color32::from_rgb(96, 165, 250),
             },
-            Self::Ocean => Palette {
-                bg: Color32::from_rgb(244, 249, 255),
+            Self::RunWhite => Palette {
+                bg: Color32::from_rgb(255, 255, 255),
                 card: Color32::from_rgb(255, 255, 255),
-                accent: Color32::from_rgb(107, 182, 255),
-                accent_soft: Color32::from_rgb(222, 239, 255),
-                text: Color32::from_rgb(34, 48, 61),
-                text_dim: Color32::from_rgb(125, 148, 168),
-                border: Color32::from_rgb(216, 232, 247),
-                ok: Color32::from_rgb(78, 175, 132),
-                warn: Color32::from_rgb(224, 161, 74),
-                err: Color32::from_rgb(214, 88, 104),
-                map_road: Color32::from_rgb(214, 230, 245),
-                map_outline: Color32::from_rgb(107, 182, 255),
+                accent: Color32::from_rgb(120, 98, 235),
+                accent_soft: Color32::from_rgb(240, 237, 255),
+                text: Color32::from_rgb(38, 32, 58),
+                text_dim: Color32::from_rgb(130, 118, 162),
+                border: Color32::from_rgb(232, 228, 243),
+                ok: Color32::from_rgb(86, 181, 138),
+                warn: Color32::from_rgb(232, 165, 84),
+                err: Color32::from_rgb(224, 96, 112),
+                map_road: Color32::from_rgb(235, 230, 248),
+                map_outline: Color32::from_rgb(120, 98, 235),
                 map_vertex: Color32::from_rgb(255, 255, 255),
-                map_building: Color32::from_rgb(238, 246, 253),
+                map_building: Color32::from_rgb(248, 245, 253),
+                grad_from: Color32::from_rgb(120, 98, 235),
+                grad_to: Color32::from_rgb(96, 165, 250),
             },
         }
     }
@@ -85,6 +92,10 @@ pub struct Palette {
     pub map_outline: Color32,
     pub map_vertex: Color32,
     pub map_building: Color32,
+    /// 主按钮渐变起始色（左上）。
+    pub grad_from: Color32,
+    /// 主按钮渐变结束色（右下）。
+    pub grad_to: Color32,
 }
 
 impl Palette {
@@ -99,23 +110,24 @@ impl Palette {
         visuals.window_stroke = Stroke::new(1.0, self.border);
         visuals.selection.bg_fill = self.accent_soft;
         visuals.selection.stroke = Stroke::new(1.0, self.accent);
+        visuals.hyperlink_color = self.accent;
         visuals.widgets.noninteractive.bg_fill = self.card;
         visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, self.text_dim);
-        visuals.widgets.noninteractive.rounding = Rounding::same(12.0);
+        visuals.widgets.noninteractive.rounding = Rounding::same(14.0);
         visuals.widgets.inactive.bg_fill = self.accent_soft;
         visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, self.text);
-        visuals.widgets.inactive.rounding = Rounding::same(12.0);
+        visuals.widgets.inactive.rounding = Rounding::same(14.0);
         visuals.widgets.hovered.bg_fill = self.accent_soft;
         visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, self.text);
-        visuals.widgets.hovered.rounding = Rounding::same(12.0);
+        visuals.widgets.hovered.rounding = Rounding::same(14.0);
         visuals.widgets.active.bg_fill = self.accent;
         visuals.widgets.active.fg_stroke = Stroke::new(1.0, Color32::WHITE);
-        visuals.widgets.active.rounding = Rounding::same(12.0);
+        visuals.widgets.active.rounding = Rounding::same(14.0);
         visuals.window_shadow = egui::epaint::Shadow {
-            offset: egui::vec2(0.0, 6.0),
-            blur: 18.0,
+            offset: egui::vec2(0.0, 8.0),
+            blur: 24.0,
             spread: 0.0,
-            color: Color32::from_black_alpha(28),
+            color: Color32::from_rgba_premultiplied(30, 25, 60, 32),
         };
         style.visuals = visuals;
 
@@ -125,8 +137,8 @@ impl Palette {
         style.text_styles.insert(TextStyle::Button, FontId::new(15.0, Proportional));
         style.text_styles.insert(TextStyle::Small, FontId::new(12.0, Proportional));
         style.spacing.item_spacing = egui::vec2(8.0, 8.0);
-        style.spacing.button_padding = egui::vec2(14.0, 9.0);
-        style.spacing.interact_size.y = 40.0;
+        style.spacing.button_padding = egui::vec2(16.0, 10.0);
+        style.spacing.interact_size.y = 42.0;
         ctx.set_style(style);
     }
 }
@@ -136,29 +148,150 @@ pub fn card_frame(palette: &Palette) -> egui::Frame {
     egui::Frame::none()
         .fill(palette.card)
         .stroke(Stroke::new(1.0, palette.border))
-        .rounding(Rounding::same(16.0))
+        .rounding(Rounding::same(18.0))
         .inner_margin(egui::Margin::same(14.0))
+        .shadow(egui::epaint::Shadow {
+            offset: egui::vec2(0.0, 4.0),
+            blur: 14.0,
+            spread: 0.0,
+            color: Color32::from_rgba_premultiplied(30, 25, 60, 16),
+        })
 }
 
-/// 主题色主按钮。
+/// 蓝紫渐变主按钮（带投影与 hover 提亮）。
 pub fn primary_button(ui: &mut egui::Ui, palette: &Palette, text: &str) -> egui::Response {
-    let button = egui::Button::new(
-        egui::RichText::new(text)
-            .color(Color32::WHITE)
-            .size(16.0),
-    )
-    .fill(palette.accent)
-    .rounding(Rounding::same(14.0))
-    .min_size(egui::vec2(0.0, 44.0));
-    ui.add(button)
+    let desired = egui::vec2(ui.available_width().min(220.0).max(140.0), 46.0);
+    let (rect, response) = ui.allocate_exact_size(desired, egui::Sense::click());
+    let painter = ui.painter_at(rect);
+    draw_gradient_button(&painter, rect, palette, text, response.hovered(), response.dragged());
+    response
 }
 
-/// 次要按钮（描边）。
+/// 蓝紫渐变全宽按钮。
+pub fn primary_button_wide(ui: &mut egui::Ui, palette: &Palette, text: &str) -> egui::Response {
+    let desired = egui::vec2(ui.available_width().max(140.0), 46.0);
+    let (rect, response) = ui.allocate_exact_size(desired, egui::Sense::click());
+    let painter = ui.painter_at(rect);
+    draw_gradient_button(&painter, rect, palette, text, response.hovered(), response.dragged());
+    response
+}
+
+fn draw_gradient_button(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    palette: &Palette,
+    text: &str,
+    hovered: bool,
+    dragged: bool,
+) {
+    let rounding = Rounding::same(14.0);
+    // 投影
+    painter.rect_filled(
+        rect.translate(egui::vec2(0.0, 3.0)),
+        rounding,
+        Color32::from_rgba_premultiplied(
+            palette.grad_to.r(),
+            palette.grad_to.g(),
+            palette.grad_to.b(),
+            60,
+        ),
+    );
+    // 纵向渐变填充
+    let from = palette.grad_from;
+    let to = palette.grad_to;
+    let steps = 18;
+    let height = rect.height();
+    for i in 0..steps {
+        let t = i as f32 / steps as f32;
+        let color = mix_color(from, to, t);
+        let y0 = rect.top() + t * height;
+        let y1 = rect.top() + (t + 1.0 / steps as f32) * height;
+        painter.rect_filled(
+            egui::Rect::from_min_max(
+                egui::pos2(rect.left(), y0),
+                egui::pos2(rect.right(), y1),
+            ),
+            rounding,
+            color,
+        );
+    }
+    // hover 提亮一层半透明白
+    if hovered {
+        painter.rect_filled(
+            rect,
+            rounding,
+            Color32::from_rgba_unmultiplied(255, 255, 255, 36),
+        );
+    }
+    if dragged {
+        painter.rect_filled(
+            rect.translate(egui::vec2(0.0, 1.0)),
+            rounding,
+            Color32::from_rgba_unmultiplied(0, 0, 0, 28),
+        );
+    }
+    // 顶部高光条
+    let highlight = egui::Rect::from_min_max(
+        egui::pos2(rect.left() + 4.0, rect.top() + 2.0),
+        egui::pos2(rect.right() - 4.0, rect.top() + 7.0),
+    );
+    painter.rect_filled(
+        highlight,
+        Rounding::same(3.0),
+        Color32::from_rgba_unmultiplied(255, 255, 255, 40),
+    );
+    // 文字
+    painter.text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        text,
+        egui::FontId::proportional(16.0),
+        Color32::WHITE,
+    );
+}
+
+fn mix_color(a: Color32, b: Color32, t: f32) -> Color32 {
+    let t = t.clamp(0.0, 1.0);
+    let a = a.to_array();
+    let b = b.to_array();
+    Color32::from_rgba_unmultiplied(
+        (a[0] as f32 + (b[0] as f32 - a[0] as f32) * t) as u8,
+        (a[1] as f32 + (b[1] as f32 - a[1] as f32) * t) as u8,
+        (a[2] as f32 + (b[2] as f32 - a[2] as f32) * t) as u8,
+        (a[3] as f32 + (b[3] as f32 - a[3] as f32) * t) as u8,
+    )
+}
+
+/// 次要描边按钮。
 pub fn ghost_button(ui: &mut egui::Ui, palette: &Palette, text: &str) -> egui::Response {
     let button = egui::Button::new(egui::RichText::new(text).color(palette.accent).size(15.0))
         .fill(palette.card)
-        .stroke(Stroke::new(1.0, palette.border))
+        .stroke(Stroke::new(1.2, palette.border))
         .rounding(Rounding::same(14.0))
-        .min_size(egui::vec2(0.0, 40.0));
+        .min_size(egui::vec2(0.0, 42.0));
     ui.add(button)
+}
+
+/// 跑步弹窗切换纯白主题：返回临时替换后的 palette，退出弹窗恢复。
+pub fn run_white_palette(global: &Palette) -> Palette {
+    // 用 RunWhite palette 的 bg/card/border，但 accent 保留全局蓝紫渐变。
+    let white = ThemeKind::RunWhite.palette();
+    Palette {
+        bg: white.bg,
+        card: white.card,
+        accent: global.accent,
+        accent_soft: global.accent_soft,
+        text: global.text,
+        text_dim: white.text_dim,
+        border: white.border,
+        ok: global.ok,
+        warn: global.warn,
+        err: global.err,
+        map_road: white.map_road,
+        map_outline: global.accent,
+        map_vertex: global.map_vertex,
+        map_building: white.map_building,
+        grad_from: global.grad_from,
+        grad_to: global.grad_to,
+    }
 }
