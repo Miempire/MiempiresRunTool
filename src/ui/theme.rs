@@ -252,11 +252,13 @@ fn draw_gradient_button(
 
 fn mix_color(a: Color32, b: Color32, t: f32) -> Color32 {
     let t = t.clamp(0.0, 1.0);
+    let a = a.to_array();
+    let b = b.to_array();
     Color32::from_rgba_unmultiplied(
-        lerp(a.r(), b.r(), t),
-        lerp(a.g(), b.g(), t),
-        lerp(a.b(), b.b(), t),
-        lerp(a.a(), b.a(), t),
+        lerp(a[0], b[0], t),
+        lerp(a[1], b[1], t),
+        lerp(a[2], b[2], t),
+        lerp(a[3], b[3], t),
     )
 }
 
