@@ -697,19 +697,26 @@ impl App {
         let run_id_clone = run_id.clone();
         std::thread::spawn(move || {
             // 使用统计（失败时保留队列，后台重试）。
-            match crate::soft::client::road_use(
+            // 若达到每日次数上限，立即终止本次跑步（服务端已限制，本地不再执行）。
+            let road_use_result = crate::soft::client::road_use(
                 &token_clone,
                 &device_id,
                 &road_id,
                 &run_id_clone,
                 &version_clone,
-            ) {
+            );
+            match &road_use_result {
                 Ok((deduped, count)) => {
                     crate::soft::roads::confirm_use(&run_id_clone);
-                    let _ = sender.send(Msg::RoadUse(Ok((deduped, count))));
+                    let _ = sender.send(Msg::RoadUse(Ok((*deduped, *count))));
                 }
                 Err(error) => {
-                    let _ = sender.send(Msg::RoadUse(Err(error)));
+                    if error.code == "daily_limit" {
+                        let _ = sender.send(Msg::RunDone(Err(error.message.clone())));
+                        ctx.request_repaint();
+                        return;
+                    }
+                    let _ = sender.send(Msg::RoadUse(Err(error.clone())));
                 }
             }
             ctx.request_repaint();
