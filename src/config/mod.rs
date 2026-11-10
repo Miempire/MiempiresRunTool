@@ -23,6 +23,21 @@ pub struct Settings {
     /// 上次使用的配速（秒/km）。
     #[serde(default = "default_pace")]
     pub last_pace_sec: f64,
+    /// 上次使用的配速范围下限（更快，秒/km）。
+    #[serde(default = "default_pace_min")]
+    pub last_pace_min_sec: f64,
+    /// 上次使用的配速范围上限（更慢，秒/km）。
+    #[serde(default = "default_pace_max")]
+    pub last_pace_max_sec: f64,
+    /// 上次使用的基准海拔（米）。
+    #[serde(default = "default_altitude")]
+    pub last_altitude_m: f64,
+    /// 上次自定义的配速曲线（x=进度 0~1，y=秒/km）。
+    #[serde(default)]
+    pub last_pace_curve: Vec<(f64, f64)>,
+    /// 上次自定义的海拔曲线（x=进度 0~1，y=米）。
+    #[serde(default)]
+    pub last_altitude_curve: Vec<(f64, f64)>,
     /// 上次选择的路网 id。
     #[serde(default)]
     pub last_road_id: Option<String>,
@@ -40,6 +55,18 @@ fn default_pace() -> f64 {
     360.0
 }
 
+fn default_pace_min() -> f64 {
+    330.0
+}
+
+fn default_pace_max() -> f64 {
+    390.0
+}
+
+fn default_altitude() -> f64 {
+    20.0
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -48,6 +75,11 @@ impl Default for Settings {
             device_notice_shown: false,
             last_dist_km: default_distance(),
             last_pace_sec: default_pace(),
+            last_pace_min_sec: default_pace_min(),
+            last_pace_max_sec: default_pace_max(),
+            last_altitude_m: default_altitude(),
+            last_pace_curve: Vec::new(),
+            last_altitude_curve: Vec::new(),
             last_road_id: None,
         }
     }

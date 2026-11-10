@@ -109,6 +109,76 @@ pub fn override_bd_a_range(track: &mut Track, range: AltitudeRange) -> Result<()
     Ok(())
 }
 
+/// 线性插值采样曲线；x 超出范围时取端点值。
+pub fn sample_curve(curve: &[(f64, f64)], x: f64) -> f64 {
+    if curve.is_empty() {
+        return 0.0;
+    }
+    if x <= curve[0].0 {
+        return curve[0].1;
+    }
+    if x >= curve[curve.len() - 1].0 {
+        return curve[curve.len() - 1].1;
+    }
+    for pair in curve.windows(2) {
+        let (x0, y0) = pair[0];
+        let (x1, y1) = pair[1];
+        if x >= x0 && x <= x1 {
+            let span = x1 - x0;
+            if span <= f64::EPSILON {
+                return y1;
+            }
+            let t = (x - x0) / span;
+            return y0 + (y1 - y0) * t;
+        }
+    }
+    curve[curve.len() - 1].1
+}
+
+/// 校验自定义曲线：2~64 个点、x 递增且位于 0~1、y 落在给定区间。
+pub fn validate_curve(
+    curve: &[(f64, f64)],
+    min_y: f64,
+    max_y: f64,
+    what: &str,
+) -> Result<(), String> {
+    if curve.len() < 2 {
+        return Err(format!("{what}曲线至少需要 2 个点"));
+    }
+    if curve.len() > 64 {
+        return Err(format!("{what}曲线最多 64 个点"));
+    }
+    let mut last_x = f64::NEG_INFINITY;
+    for (x, y) in curve {
+        if !x.is_finite() || !(0.0..=1.0).contains(x) {
+            return Err(format!("{what}曲线横坐标必须在 0~100% 之间"));
+        }
+        if *x <= last_x {
+            return Err(format!("{what}曲线横坐标必须递增"));
+        }
+        if !y.is_finite() || *y < min_y || *y > max_y {
+            return Err(format!("{what}曲线数值超出允许范围 {min_y}~{max_y}"));
+        }
+        last_x = *x;
+    }
+    Ok(())
+}
+
+/// 按进度曲线覆盖海拔：x 为已完成距离占比，y 为海拔（米）。
+pub fn apply_altitude_curve(track: &mut Track, curve: &[(f64, f64)]) -> Result<(), String> {
+    validate_curve(curve, -500.0, 9000.0, "海拔")?;
+    let total = track
+        .totalDistance
+        .max(track.locations.last().map(|p| p.totalDis).unwrap_or(0.0));
+    let total = if total > 1e-6 { total } else { 1.0 };
+    for point in &mut track.locations {
+        let x = (point.totalDis / total).clamp(0.0, 1.0);
+        point.bdA = round_to(sample_curve(curve, x), 2);
+        point.hasAltitude = true;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

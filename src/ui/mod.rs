@@ -3,6 +3,7 @@
 //! 设计原则：极简、双层信息（主界面只留入口，配置全部收进弹窗）。
 
 pub mod auth;
+pub mod curve;
 pub mod fonts;
 pub mod log;
 pub mod map;
@@ -720,8 +721,12 @@ impl App {
         let path = preview.path.clone();
         let outline = preview.preview.outline.clone();
         let distance_m = (self.run.distance_km * 1000.0).max(200.0);
-        let pace = self.run.pace_sec.clamp(170.0, 520.0);
+        let pace_min = self.run.pace_min.clamp(150.0, 900.0);
+        let pace_max = self.run.pace_max.clamp(pace_min + 5.0, 900.0);
+        let pace = ((pace_min + pace_max) * 0.5).clamp(170.0, 520.0);
         let duration_s = ((distance_m / 1000.0) * pace).round().max(60.0) as i64;
+        let pace_curve = self.run.pace_curve.sample();
+        let altitude_curve = self.run.altitude_curve.sample();
         let run_id = uuid::Uuid::new_v4().to_string();
         let version = road.version.clone();
         let device_id = crate::soft::session::device_id();
@@ -739,8 +744,8 @@ impl App {
         let mut run_config = crate::api::model::load_config();
         run_config.dist_min = (distance_m / 1000.0) as f32;
         run_config.dist_max = run_config.dist_min + 0.2;
-        run_config.pace_min = pace as f32 - 20.0;
-        run_config.pace_max = pace as f32 + 20.0;
+        run_config.pace_min = pace_min as f32;
+        run_config.pace_max = pace_max as f32;
         let _ = crate::api::model::save_config(&run_config);
 
         // 需求：本地先记账，上传失败也不丢使用次数。
@@ -754,6 +759,11 @@ impl App {
         self.log.clear();
         self.settings.last_dist_km = self.run.distance_km;
         self.settings.last_pace_sec = pace;
+        self.settings.last_pace_min_sec = pace_min;
+        self.settings.last_pace_max_sec = pace_max;
+        self.settings.last_altitude_m = self.run.altitude_m;
+        self.settings.last_pace_curve = pace_curve.clone();
+        self.settings.last_altitude_curve = altitude_curve.clone();
         self.settings.last_road_id = Some(road.id.clone());
         let _ = config::save(&self.settings);
         log_upload::info(&format!(
@@ -818,7 +828,9 @@ impl App {
                 } else {
                     outline
                 },
-                pace_range: Some((pace - 20.0, pace + 20.0)),
+                pace_range: Some((pace_min, pace_max)),
+                pace_curve,
+                altitude_curve,
                 must_limit: None,
             };
             let mut on_log = |line: &str| {

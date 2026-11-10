@@ -9,6 +9,7 @@ use std::sync::Arc;
 use eframe::egui;
 use egui::{Align, Color32, Layout, RichText};
 
+use super::curve::{self, CurveEditor, CurveKind};
 use super::map::{self, MapState};
 use super::{theme, App, Msg};
 use crate::road_editor;
@@ -44,6 +45,7 @@ impl RunMode {
 pub enum RunStep {
     PickRoad,
     Preview,
+    Params,
     Edit,
     Running,
     Done,
@@ -86,6 +88,14 @@ pub struct RunUi {
     pub pending_start: bool,
     pub distance_km: f64,
     pub pace_sec: f64,
+    /// 配速范围（秒/km，min 更快、max 更慢）。
+    pub pace_min: f64,
+    pub pace_max: f64,
+    /// 基准海拔（米）。
+    pub altitude_m: f64,
+    /// 自定义配速曲线与海拔曲线。
+    pub pace_curve: CurveEditor,
+    pub altitude_curve: CurveEditor,
     /// 跑步模式（真实路网 / 跑道绕圈）。
     pub mode: RunMode,
     /// 正在拖动的轮廓顶点（仅在编辑页使用）。
@@ -94,6 +104,33 @@ pub struct RunUi {
 
 impl RunUi {
     pub fn new(settings: &crate::config::Settings) -> Self {
+        let pace_min = settings.last_pace_min_sec.clamp(170.0, 520.0);
+        let pace_max = settings
+            .last_pace_max_sec
+            .clamp(170.0, 520.0)
+            .max(pace_min + 5.0);
+        let pace_sec = ((pace_min + pace_max) * 0.5).clamp(170.0, 520.0);
+        let altitude_m = settings.last_altitude_m.clamp(-100.0, 5000.0);
+        let pace_curve = if settings.last_pace_curve.len() >= 2 {
+            CurveEditor::new(
+                CurveKind::Pace,
+                settings.last_pace_curve.clone(),
+                pace_min - 10.0,
+                pace_max + 10.0,
+            )
+        } else {
+            CurveEditor::default_pace(pace_min, pace_max)
+        };
+        let altitude_curve = if settings.last_altitude_curve.len() >= 2 {
+            CurveEditor::new(
+                CurveKind::Altitude,
+                settings.last_altitude_curve.clone(),
+                altitude_m - 25.0,
+                altitude_m + 25.0,
+            )
+        } else {
+            CurveEditor::default_altitude(altitude_m)
+        };
         Self {
             open: false,
             step: RunStep::PickRoad,
@@ -107,7 +144,12 @@ impl RunUi {
             result: None,
             pending_start: false,
             distance_km: settings.last_dist_km.clamp(0.5, 21.0),
-            pace_sec: settings.last_pace_sec.clamp(170.0, 520.0),
+            pace_sec,
+            pace_min,
+            pace_max,
+            altitude_m,
+            pace_curve,
+            altitude_curve,
             mode: RunMode::Track,
             drag: None,
         }
@@ -243,7 +285,7 @@ pub fn draw_home(app: &mut App, ui: &mut egui::Ui) {
     ui.add_space(10.0);
     theme::card_frame(&palette).show(ui, |ui| {
         ui.label(
-            RichText::new("三步开跑")
+            RichText::new("四步开跑")
                 .size(13.5)
                 .strong()
                 .color(palette.text),
@@ -251,8 +293,9 @@ pub fn draw_home(app: &mut App, ui: &mut egui::Ui) {
         ui.add_space(2.0);
         for (index, text) in [
             "选择服务器上的路网",
-            "预览并微调轮廓",
-            "确认距离与配速，开始",
+            "预览并加载必经点/检查点",
+            "调整配速范围、海拔与曲线",
+            "确认距离后开始",
         ]
         .iter()
         .enumerate()
@@ -287,6 +330,7 @@ pub fn draw_dialog(app: &mut App, ctx: &egui::Context) {
     let title = match app.run.step {
         RunStep::PickRoad => "跑步 · 选择路网",
         RunStep::Preview => "跑步 · 预览",
+        RunStep::Params => "跑步 · 参数与曲线",
         RunStep::Edit => "跑步 · 编辑轮廓",
         RunStep::Running => "跑步中",
         RunStep::Done => "跑步完成",
@@ -325,6 +369,7 @@ pub fn draw_dialog(app: &mut App, ctx: &egui::Context) {
                     match app.run.step {
                         RunStep::PickRoad => draw_pick_road(app, ui),
                         RunStep::Preview => draw_preview(app, ui),
+                        RunStep::Params => draw_params(app, ui),
                         RunStep::Edit => draw_edit(app, ui),
                         RunStep::Running => draw_running(app, ui),
                         RunStep::Done => draw_done(app, ui),
@@ -344,8 +389,9 @@ pub fn draw_dialog(app: &mut App, ctx: &egui::Context) {
 
 fn step_text(step: RunStep) -> &'static str {
     match step {
-        RunStep::PickRoad => "1 / 3 · 选择服务器路网",
-        RunStep::Preview => "2 / 3 · 预览与参数",
+        RunStep::PickRoad => "1 / 4 · 选择服务器路网",
+        RunStep::Preview => "2 / 4 · 预览与检查点",
+        RunStep::Params => "3 / 4 · 参数与配速/海拔曲线",
         RunStep::Edit => "轮廓编辑",
         RunStep::Running => "正在提交，请保持应用在前台",
         RunStep::Done => "本次跑步已提交",
@@ -701,22 +747,17 @@ fn draw_preview(app: &mut App, ui: &mut egui::Ui) {
     }
 
     ui.add_space(2.0);
-    ui.add(
-        egui::Slider::new(&mut app.run.distance_km, 0.5..=21.0)
-            .step_by(0.5)
-            .text("距离 (km)"),
-    );
-    ui.add(
-        egui::Slider::new(&mut app.run.pace_sec, 170.0..=520.0)
-            .step_by(5.0)
-            .text("配速")
-            .custom_formatter(|value, _| format_pace(value as f32)),
-    );
+    let pace_min = app.run.pace_min;
+    let pace_max = app.run.pace_max;
+    let average_pace = (pace_min + pace_max) * 0.5;
     ui.label(dim(
         format!(
-            "预计用时 {}",
+            "配速 {} ~ {} · 海拔基准 {:.0} m · 预计 {}",
+            format_pace(pace_min as f32),
+            format_pace(pace_max as f32),
+            app.run.altitude_m,
             format_duration(
-                (app.run.distance_km * app.run.pace_sec).round().max(1.0) as u64
+                (app.run.distance_km * average_pace).round().max(1.0) as u64
             )
         ),
         &palette,
@@ -724,6 +765,7 @@ fn draw_preview(app: &mut App, ui: &mut egui::Ui) {
 
     ui.add_space(6.0);
     let mut start = false;
+    let mut open_params = false;
     ui.horizontal(|ui| {
         if theme::ghost_button(ui, &palette, "重选路网").clicked() {
             app.run.step = RunStep::PickRoad;
@@ -732,6 +774,119 @@ fn draw_preview(app: &mut App, ui: &mut egui::Ui) {
             && theme::ghost_button(ui, &palette, "编辑轮廓").clicked()
         {
             app.run.step = RunStep::Edit;
+        }
+        if theme::ghost_button(ui, &palette, "参数与曲线").clicked() {
+            open_params = true;
+        }
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            if theme::primary_button(ui, &palette, "开始跑步").clicked() {
+                start = true;
+            }
+        });
+    });
+    if open_params {
+        app.run.step = RunStep::Params;
+    }
+    if start {
+        app.start_run();
+    }
+}
+
+// ── 步骤 3：参数与曲线 ──────────────────────────────────────
+
+fn draw_params(app: &mut App, ui: &mut egui::Ui) {
+    let palette = app.palette;
+    ui.label(dim(
+        "距离与配速范围决定整体节奏，曲线决定节奏如何分布到全程。",
+        &palette,
+    ));
+    ui.add_space(4.0);
+    ui.add(
+        egui::Slider::new(&mut app.run.distance_km, 0.5..=21.0)
+            .step_by(0.5)
+            .text("距离 (km)"),
+    );
+    ui.add(
+        egui::Slider::new(&mut app.run.pace_min, 150.0..=540.0)
+            .step_by(5.0)
+            .text("最快配速")
+            .custom_formatter(|value, _| format_pace(value as f32)),
+    );
+    ui.add(
+        egui::Slider::new(&mut app.run.pace_max, 150.0..=600.0)
+            .step_by(5.0)
+            .text("最慢配速")
+            .custom_formatter(|value, _| format_pace(value as f32)),
+    );
+    if app.run.pace_max < app.run.pace_min + 5.0 {
+        app.run.pace_max = app.run.pace_min + 5.0;
+    }
+
+    let mut altitude = app.run.altitude_m;
+    ui.add(
+        egui::Slider::new(&mut altitude, -100.0..=3000.0)
+            .step_by(1.0)
+            .text("基准海拔 (m)"),
+    );
+    if (altitude - app.run.altitude_m).abs() > 1e-6 {
+        let delta = altitude - app.run.altitude_m;
+        app.run.altitude_m = altitude;
+        app.run.altitude_curve.shift(delta);
+        app.run
+            .altitude_curve
+            .set_range(altitude - 25.0, altitude + 25.0);
+    }
+
+    app.run
+        .pace_curve
+        .set_range(app.run.pace_min - 10.0, app.run.pace_max + 10.0);
+    app.run.pace_sec = ((app.run.pace_min + app.run.pace_max) * 0.5).clamp(170.0, 520.0);
+
+    ui.add_space(8.0);
+    curve::section_label(ui, &palette, "配速曲线");
+    ui.label(dim(
+        "纵轴为配速（越低越快）。拖动圆点调整；双击空白加点；右键点删除。",
+        &palette,
+    ));
+    app.run.pace_curve.draw(ui, &palette);
+    if let Err(error) = app.run.pace_curve.validate() {
+        ui.label(RichText::new(error).size(11.5).color(palette.err));
+    }
+    if theme::ghost_button(ui, &palette, "重置配速曲线").clicked() {
+        app.run.pace_curve.reset();
+    }
+
+    ui.add_space(8.0);
+    curve::section_label(ui, &palette, "海拔曲线");
+    ui.label(dim(
+        "纵轴为海拔（米）。起终点建议回到同一高度，更接近真实闭环路线。",
+        &palette,
+    ));
+    app.run.altitude_curve.draw(ui, &palette);
+    if let Err(error) = app.run.altitude_curve.validate() {
+        ui.label(RichText::new(error).size(11.5).color(palette.err));
+    }
+    if theme::ghost_button(ui, &palette, "重置海拔曲线").clicked() {
+        app.run.altitude_curve.reset();
+    }
+
+    ui.add_space(6.0);
+    let average_pace = (app.run.pace_min + app.run.pace_max) * 0.5;
+    ui.label(dim(
+        format!(
+            "预计用时 {} · 爬升按曲线自动计算",
+            format_duration(
+                (app.run.distance_km * average_pace).round().max(1.0) as u64
+            )
+        ),
+        &palette,
+    ));
+
+    ui.add_space(8.0);
+    let mut start = false;
+    ui.horizontal(|ui| {
+        if theme::ghost_button(ui, &palette, "返回预览").clicked() {
+            app.run.step = RunStep::Preview;
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if theme::primary_button(ui, &palette, "开始跑步").clicked() {
@@ -744,7 +899,7 @@ fn draw_preview(app: &mut App, ui: &mut egui::Ui) {
     }
 }
 
-// ── 步骤 3：编辑轮廓 ────────────────────────────────────────
+// ── 步骤 4：编辑轮廓 ────────────────────────────────────────
 
 fn draw_edit(app: &mut App, ui: &mut egui::Ui) {
     let palette = app.palette;

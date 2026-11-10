@@ -34,6 +34,10 @@ pub struct RunParams {
     /// 用户的配速范围（秒/km，两端任意顺序）；用于把瞬时速度限制在范围内。
     /// `None` 时退回生成器的历史宽窗口（1.9~6.28 m/s）。
     pub pace_range: Option<(f64, f64)>,
+    /// 用户绘制的配速曲线（x=进度 0~1，y=秒/km）；空表示不重定时。
+    pub pace_curve: Vec<(f64, f64)>,
+    /// 用户绘制的海拔曲线（x=进度 0~1，y=米）；空表示不覆盖。
+    pub altitude_curve: Vec<(f64, f64)>,
     /// 只经过策略必经点的前 N 个；`None`=全部，`Some(0)`=不经过。
     pub must_limit: Option<usize>,
 }
@@ -334,7 +338,26 @@ pub fn run_full_flow(
             v_bounds,
         )?,
     };
-    if let Some(range) = params.manual_altitude_range {
+    if !params.altitude_curve.is_empty() {
+        crate::track::altitude::apply_altitude_curve(&mut track, &params.altitude_curve)?;
+        let min_m = track
+            .locations
+            .iter()
+            .map(|p| p.bdA)
+            .fold(f64::INFINITY, f64::min);
+        let max_m = track
+            .locations
+            .iter()
+            .map(|p| p.bdA)
+            .fold(f64::NEG_INFINITY, f64::max);
+        log(&format!(
+            "√ [track] 已应用海拔曲线（{:.1}-{:.1}m，{} 个控制点），覆盖 {} 个点",
+            min_m,
+            max_m,
+            params.altitude_curve.len(),
+            track.locations.len()
+        ));
+    } else if let Some(range) = params.manual_altitude_range {
         crate::track::altitude::override_bd_a_range(&mut track, range)?;
         log(&format!(
             "√ [track] 已将海拔曲线映射到 {:.2}-{:.2}m，覆盖 {} 个点，爬升/圈数据将按覆盖值计算",
@@ -348,6 +371,14 @@ pub fn run_full_flow(
             "√ [track] 已用手动海拔 {:.2}m 覆盖 {} 个点，爬升/圈数据将按覆盖值计算",
             altitude_m,
             track.locations.len()
+        ));
+    }
+    if !params.pace_curve.is_empty() {
+        crate::track::retime::apply_pace_curve(&mut track, &params.pace_curve)?;
+        log(&format!(
+            "√ [track] 已应用配速曲线（{} 个控制点），总时长 {}s",
+            params.pace_curve.len(),
+            track.totalTime
         ));
     }
     log(&format!(
