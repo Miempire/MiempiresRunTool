@@ -1,4 +1,4 @@
-﻿//! 应用主界面：顶部栏 + 两个标签（跑步 / 运动记录）+ 各种弹窗。
+﻿﻿﻿﻿﻿//! 应用主界面：顶部栏 + 两个标签（跑步 / 运动记录）+ 各种弹窗。
 //!
 //! 设计原则：极简、双层信息（主界面只留入口，配置全部收进弹窗）。
 
@@ -257,9 +257,25 @@ impl App {
         self.records = RecordsUi::default();
     }
 
-    /// 退出官方账号：清除本地加密会话与运动记录缓存。
+    /// 退出官方账号：先通知服务端登出（释放单会话占用），再清本地会话与缓存。
     pub fn official_logout(&mut self) {
-        self.official.session = None;
+        if let Some(session) = self.official.session.take() {
+            self.spawn(move |tx| {
+                let identity = crate::api::model::load_identity();
+                let mut client = crate::api::client::ApiClient::new(identity, Some(session));
+                let mut failed = false;
+                crate::api::login::logout(&mut client, &mut |line| {
+                    if line.contains("失败") {
+                        failed = true;
+                    }
+                });
+                let _ = tx.send(Msg::Toast(if failed {
+                    "已退出（服务端登出失败，本地已清除）".into()
+                } else {
+                    "已退出官方账号".into()
+                }));
+            });
+        }
         self.official.username.clear();
         self.official.password.clear();
         self.official.error = None;
