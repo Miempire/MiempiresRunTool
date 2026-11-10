@@ -123,12 +123,7 @@ impl Palette {
         visuals.widgets.active.bg_fill = self.accent;
         visuals.widgets.active.fg_stroke = Stroke::new(1.0, Color32::WHITE);
         visuals.widgets.active.rounding = Rounding::same(14.0);
-        visuals.window_shadow = egui::epaint::Shadow {
-            offset: egui::vec2(0.0, 8.0),
-            blur: 24.0,
-            spread: 0.0,
-            color: Color32::from_rgba_premultiplied(30, 25, 60, 32),
-        };
+        // window_shadow 和 spacing 在 0.29 改了，用默认值先编译过。
         style.visuals = visuals;
 
         use egui::{FontFamily::Proportional, FontId, TextStyle};
@@ -138,7 +133,6 @@ impl Palette {
         style.text_styles.insert(TextStyle::Small, FontId::new(12.0, Proportional));
         style.spacing.item_spacing = egui::vec2(8.0, 8.0);
         style.spacing.button_padding = egui::vec2(16.0, 10.0);
-        style.spacing.interact_size.y = 42.0;
         ctx.set_style(style);
     }
 }
@@ -150,12 +144,6 @@ pub fn card_frame(palette: &Palette) -> egui::Frame {
         .stroke(Stroke::new(1.0, palette.border))
         .rounding(Rounding::same(18.0))
         .inner_margin(egui::Margin::same(14.0))
-        .shadow(egui::epaint::Shadow {
-            offset: egui::vec2(0.0, 4.0),
-            blur: 14.0,
-            spread: 0.0,
-            color: Color32::from_rgba_premultiplied(30, 25, 60, 16),
-        })
 }
 
 /// 蓝紫渐变主按钮（带投影与 hover 提亮）。
@@ -185,21 +173,10 @@ fn draw_gradient_button(
     dragged: bool,
 ) {
     let rounding = Rounding::same(14.0);
-    // 投影
-    painter.rect_filled(
-        rect.translate(egui::vec2(0.0, 3.0)),
-        rounding,
-        Color32::from_rgba_premultiplied(
-            palette.grad_to.r(),
-            palette.grad_to.g(),
-            palette.grad_to.b(),
-            60,
-        ),
-    );
     // 纵向渐变填充
     let from = palette.grad_from;
     let to = palette.grad_to;
-    let steps = 18;
+    let steps = 16;
     let height = rect.height();
     for i in 0..steps {
         let t = i as f32 / steps as f32;
@@ -215,32 +192,20 @@ fn draw_gradient_button(
             color,
         );
     }
-    // hover 提亮一层半透明白
-    if hovered {
+    // hover / pressed 反馈
+    if dragged {
         painter.rect_filled(
             rect,
             rounding,
-            Color32::from_rgba_unmultiplied(255, 255, 255, 36),
+            Color32::from_rgba_unmultiplied(0, 0, 0, 40),
         );
-    }
-    if dragged {
+    } else if hovered {
         painter.rect_filled(
-            rect.translate(egui::vec2(0.0, 1.0)),
+            rect,
             rounding,
-            Color32::from_rgba_unmultiplied(0, 0, 0, 28),
+            Color32::from_rgba_unmultiplied(255, 255, 255, 28),
         );
     }
-    // 顶部高光条
-    let highlight = egui::Rect::from_min_max(
-        egui::pos2(rect.left() + 4.0, rect.top() + 2.0),
-        egui::pos2(rect.right() - 4.0, rect.top() + 7.0),
-    );
-    painter.rect_filled(
-        highlight,
-        Rounding::same(3.0),
-        Color32::from_rgba_unmultiplied(255, 255, 255, 40),
-    );
-    // 文字
     painter.text(
         rect.center(),
         egui::Align2::CENTER_CENTER,
