@@ -10,6 +10,10 @@
 use std::path::PathBuf;
 
 use cbc::cipher::{KeyIvInit, block_padding::Pkcs7};
+#[cfg(not(target_os = "android"))]
+use cbc::cipher::{BlockModeDecrypt, BlockModeEncrypt};
+#[cfg(not(target_os = "android"))]
+use sha2::{Digest, Sha256};
 
 type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;

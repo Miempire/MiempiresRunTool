@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿//! 极简二次元双主题：默认蓝紫（Ocean）/ 粉紫（Sakura）/ 纯白（跑步弹窗）。
+//! 极简二次元双主题：默认蓝紫（Ocean）/ 粉紫（Sakura）/ 纯白（跑步弹窗）。
 
 use eframe::egui::{self, Color32, Rounding, Stroke};
 
