@@ -184,16 +184,16 @@ pub fn login(
     Ok(sess)
 }
 
-/// 登出并清理本地会话。
+/// 通知服务端登出。本地会话由调用方清除，避免后台线程误删刚登录的新会话。
 pub fn logout(client: &mut ApiClient, log: &mut dyn FnMut(&str)) {
-    if let Some(sess) = client.login.clone() {
-        match client.call("POST", LOGOUT_PATH, "{}", &[]) {
-            Ok(_) => log(&format!("[logout] 服务端已登出 uid={}", sess.uid)),
-            Err(e) => log(&format!("[logout] 服务端登出失败: {e}")),
-        }
+    let Some(sess) = client.login.clone() else {
+        log("[logout] 无官方会话，跳过服务端登出");
+        return;
+    };
+    match client.call("POST", LOGOUT_PATH, "{}", &[]) {
+        Ok(_) => log(&format!("[logout] 服务端已登出 uid={}", sess.uid)),
+        Err(e) => log(&format!("[logout] 服务端登出失败: {e}")),
     }
-    super::model::clear_session();
-    log("[logout] 本地会话已删除");
 }
 
 fn truncate(s: &str, n: usize) -> String {

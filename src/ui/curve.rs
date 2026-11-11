@@ -1,10 +1,11 @@
-﻿//! 可拖动控制点的曲线编辑器（配速 / 海拔）。
+//! 可拖动控制点的曲线编辑器（配速 / 海拔）。
 //!
 //! 带坐标轴与刻度：横轴是完成进度（0~100%），纵轴是秒每公里或海拔米数。
 //! 拖动圆点即可改变曲线；双击空白处加点，右键点删除。
 
 use eframe::egui;
 use egui::{Color32, Pos2, Rect, RichText, Sense, Stroke, Vec2};
+use rand::Rng;
 
 use super::theme;
 use crate::track::altitude::{sample_curve, validate_curve};
@@ -47,8 +48,14 @@ pub struct CurveEditor {
     pub points: Vec<(f64, f64)>,
     pub y_min: f64,
     pub y_max: f64,
+    /// 噪声幅度（配速：秒/公里；海拔：米）。
+    pub noise_amp: f64,
     pub selected: Option<usize>,
     drag: Option<usize>,
+    /// 纵轴视窗中心与跨度（放大/平移后的可见区间）。
+    view_center: f64,
+    view_span: f64,
+    panning: bool,
 }
 
 impl CurveEditor {
@@ -71,8 +78,12 @@ impl CurveEditor {
             points,
             y_min,
             y_max,
+            noise_amp: default_noise(kind),
             selected: None,
             drag: None,
+            view_center: (y_min + y_max) * 0.5,
+            view_span: (y_max - y_min).max(1.0),
+            panning: false,
         }
     }
 
@@ -82,8 +93,12 @@ impl CurveEditor {
             points: default_pace(min_sec - 10.0, max_sec + 10.0),
             y_min: min_sec - 10.0,
             y_max: max_sec + 10.0,
+            noise_amp: default_noise(CurveKind::Pace),
             selected: None,
             drag: None,
+            view_center: (min_sec + max_sec) * 0.5,
+            view_span: (max_sec - min_sec + 20.0).max(20.0),
+            panning: false,
         }
     }
 
@@ -93,8 +108,12 @@ impl CurveEditor {
             points: default_altitude(base),
             y_min: base - 25.0,
             y_max: base + 25.0,
+            noise_amp: default_noise(CurveKind::Altitude),
             selected: None,
             drag: None,
+            view_center: base,
+            view_span: 50.0,
+            panning: false,
         }
     }
 
@@ -106,6 +125,7 @@ impl CurveEditor {
         };
         self.selected = None;
         self.drag = None;
+        self.reset_view();
     }
 
     /// 调整纵轴范围，并把越界的控制点夹回范围内。
@@ -123,6 +143,7 @@ impl CurveEditor {
         for point in &mut self.points {
             point.1 = point.1.clamp(low, high);
         }
+        self.reset_view();
     }
 
     /// 整体平移曲线（用于跟随海拔基准变化）。
@@ -133,6 +154,110 @@ impl CurveEditor {
         for point in &mut self.points {
             point.1 += delta;
         }
+    }
+
+    fn full_span(&self) -> f64 {
+        (self.y_max - self.y_min).max(1.0)
+    }
+
+    pub fn reset_view(&mut self) {
+        self.view_center = (self.y_min + self.y_max) * 0.5;
+        self.view_span = self.full_span();
+        self.panning = false;
+    }
+
+    /// 当前可见纵轴区间。
+    pub fn view_range(&self) -> (f64, f64) {
+        let half = self.view_span * 0.5;
+        (self.view_center - half, self.view_center + half)
+    }
+
+    pub fn is_zoomed(&self) -> bool {
+        self.view_span < self.full_span() - 1e-9
+    }
+
+    fn clamp_view(&mut self) {
+        let full = self.full_span();
+        self.view_span = self.view_span.clamp(full * 0.05, full);
+        let half = self.view_span * 0.5;
+        let low = self.y_min + half;
+        let high = self.y_max - half;
+        self.view_center = if low <= high {
+            self.view_center.clamp(low, high)
+        } else {
+            (self.y_min + self.y_max) * 0.5
+        };
+    }
+
+    /// 以屏幕纵向比例（0 = 底部）为锚点缩放，factor < 1 为放大。
+    fn zoom_at(&mut self, anchor_ratio: f64, factor: f64) {
+        let full = self.full_span();
+        let (vmin, vmax) = self.view_range();
+        let anchor = vmin + anchor_ratio * (vmax - vmin);
+        self.view_span = (self.view_span * factor).clamp(full * 0.05, full);
+        self.view_center = anchor + (0.5 - anchor_ratio) * self.view_span;
+        self.clamp_view();
+    }
+
+    /// 在原曲线上叠加多频起伏，生成可直接拖动的控制点。
+    /// 配速单位是秒/公里，海拔单位是米，幅度由 `noise_amp` 控制。
+    pub fn apply_noise(&mut self) {
+        let amp = self.noise_amp.max(0.0);
+        if amp <= 0.0 || self.points.len() < 2 {
+            return;
+        }
+        let (kind_min, kind_max) = self.kind.range();
+        let count = 33usize;
+        let mut rng = rand::thread_rng();
+        let base: Vec<(f64, f64)> = (0..count)
+            .map(|index| {
+                let x = index as f64 / (count - 1) as f64;
+                (x, sample_curve(&self.points, x))
+            })
+            .collect();
+        let phases: [f64; 3] = [
+            rng.gen_range(0.0..std::f64::consts::TAU),
+            rng.gen_range(0.0..std::f64::consts::TAU),
+            rng.gen_range(0.0..std::f64::consts::TAU),
+        ];
+        let freqs: [f64; 3] = [
+            rng.gen_range(0.8..1.6),
+            rng.gen_range(2.2..3.6),
+            rng.gen_range(5.0..8.0),
+        ];
+        let mut out = Vec::with_capacity(count);
+        for (x, y0) in &base {
+            let tau = std::f64::consts::TAU;
+            let wave = 0.55 * (tau * freqs[0] * x + phases[0]).sin()
+                + 0.28 * (tau * freqs[1] * x + phases[1]).sin()
+                + 0.17 * (tau * freqs[2] * x + phases[2]).sin();
+            let jitter = rng.gen_range(-0.2..0.2);
+            let y = (y0 + amp * (wave + jitter))
+                .clamp(self.y_min, self.y_max)
+                .clamp(kind_min, kind_max);
+            out.push((*x, y));
+        }
+        // 首尾保持原值：闭合路线的海拔要回到同一高度。
+        out[0].1 = base[0].1;
+        let last = count - 1;
+        out[last].1 = base[last].1;
+        self.points = out;
+        self.selected = None;
+        self.drag = None;
+        self.panning = false;
+    }
+
+    /// 控制点沿进度均匀排布（保留纵值顺序），便于噪声后整理点位。
+    pub fn redistribute(&mut self) {
+        let count = self.points.len();
+        if count < 2 {
+            return;
+        }
+        for (index, point) in self.points.iter_mut().enumerate() {
+            point.0 = index as f64 / (count - 1) as f64;
+        }
+        self.selected = None;
+        self.drag = None;
     }
 
     pub fn value_at(&self, x: f64) -> f64 {
@@ -170,28 +295,47 @@ impl CurveEditor {
             return false;
         }
 
+        let (view_min, view_max) = self.view_range();
+        let view_span = (view_max - view_min).max(1e-6);
         let to_screen = |x: f64, y: f64| -> Pos2 {
             let px = plot.left() + (x.clamp(0.0, 1.0) as f32) * plot.width();
-            let ratio = ((y - self.y_min) / (self.y_max - self.y_min)).clamp(0.0, 1.0);
-            let py = plot.bottom() - ratio as f32 * plot.height();
+            let ratio = ((y - view_min) / view_span) as f32;
+            let py = plot.bottom() - ratio * plot.height();
             Pos2::new(px, py)
         };
         let from_screen = |pos: Pos2| -> (f64, f64) {
             let x = ((pos.x - plot.left()) / plot.width()).clamp(0.0, 1.0) as f64;
-            let ratio = ((plot.bottom() - pos.y) / plot.height()).clamp(0.0, 1.0) as f64;
-            let y = self.y_min + ratio * (self.y_max - self.y_min);
+            let ratio = ((plot.bottom() - pos.y) / plot.height()) as f64;
+            let y = view_min + ratio * view_span;
             (x, y)
         };
+
+        // 滚轮缩放纵轴（以指针位置为锚点）。
+        if response.hovered() {
+            let scroll = ui.input(|input| input.raw_scroll_delta.y);
+            if scroll.abs() > 0.5 {
+                if let Some(pos) = response.hover_pos() {
+                    if plot.contains(pos) {
+                        let ratio =
+                            ((plot.bottom() - pos.y) / plot.height()).clamp(0.0, 1.0) as f64;
+                        let factor = if scroll > 0.0 { 0.88 } else { 1.0 / 0.88 };
+                        self.zoom_at(ratio, factor);
+                    }
+                }
+            }
+        }
 
         // 网格与坐标轴
         let grid = Stroke::new(1.0_f32, palette.accent_soft);
         for step in 0..=4 {
             let x = step as f64 / 4.0;
-            let top = to_screen(x, self.y_max);
-            let bottom = to_screen(x, self.y_min);
-            painter.line_segment([top, bottom], grid);
+            let px = plot.left() + x as f32 * plot.width();
+            painter.line_segment(
+                [Pos2::new(px, plot.top()), Pos2::new(px, plot.bottom())],
+                grid,
+            );
             painter.text(
-                Pos2::new(bottom.x, plot.bottom() + 6.0),
+                Pos2::new(px, plot.bottom() + 6.0),
                 egui::Align2::CENTER_TOP,
                 format!("{:.0}%", x * 100.0),
                 egui::FontId::proportional(9.0),
@@ -200,12 +344,14 @@ impl CurveEditor {
         }
         for step in 0..=4 {
             let ratio = step as f64 / 4.0;
-            let y = self.y_min + ratio * (self.y_max - self.y_min);
-            let left = to_screen(0.0, y);
-            let right = to_screen(1.0, y);
-            painter.line_segment([left, right], grid);
+            let y = view_min + ratio * view_span;
+            let py = plot.bottom() - ratio as f32 * plot.height();
+            painter.line_segment(
+                [Pos2::new(plot.left(), py), Pos2::new(plot.right(), py)],
+                grid,
+            );
             painter.text(
-                Pos2::new(plot.left() - 6.0, left.y),
+                Pos2::new(plot.left() - 6.0, py),
                 egui::Align2::RIGHT_CENTER,
                 self.kind.y_text(y),
                 egui::FontId::proportional(9.0),
@@ -220,15 +366,29 @@ impl CurveEditor {
             [plot.left_top(), plot.left_bottom()],
             Stroke::new(1.0_f32, palette.border),
         );
+        if self.is_zoomed() {
+            let zoom = self.full_span() / self.view_span;
+            painter.text(
+                Pos2::new(plot.right() - 4.0, plot.top() + 4.0),
+                egui::Align2::RIGHT_TOP,
+                format!("×{zoom:.1}"),
+                egui::FontId::proportional(9.0),
+                palette.text_dim,
+            );
+        }
 
-        // 曲线
+        // 曲线（裁剪到绘图区，缩放后越界部分不画出来）
+        let clipped = painter.with_clip_rect(plot);
         let line: Vec<Pos2> = self
             .points
             .iter()
             .map(|(x, y)| to_screen(*x, *y))
             .collect();
         if line.len() >= 2 {
-            painter.add(egui::Shape::line(line.clone(), Stroke::new(2.0_f32, palette.accent)));
+            clipped.add(egui::Shape::line(
+                line.clone(),
+                Stroke::new(2.0_f32, palette.accent),
+            ));
         }
 
         // 交互命中检测
@@ -248,10 +408,32 @@ impl CurveEditor {
 
         let mut changed = false;
         let down = ui.input(|input| input.pointer.primary_down());
+        // 空白处拖动 = 平移纵轴视窗。
+        if down && self.drag.is_none() && !self.panning && hit.is_none()
+            && response.is_pointer_button_down_on()
+        {
+            if let Some(pos) = ui.input(|input| input.pointer.interact_pos()) {
+                if plot.contains(pos) {
+                    self.panning = true;
+                }
+            }
+        }
+        if self.panning {
+            if !down {
+                self.panning = false;
+            } else {
+                let delta = ui.input(|input| input.pointer.delta().y) as f64;
+                if delta != 0.0 {
+                    self.view_center += delta / plot.height() as f64 * self.view_span;
+                    self.clamp_view();
+                }
+            }
+        }
         if down && self.drag.is_none() && response.is_pointer_button_down_on() {
             if let Some(index) = hit {
                 self.drag = Some(index);
                 self.selected = Some(index);
+                self.panning = false;
             }
         }
         if let Some(index) = self.drag {
@@ -314,8 +496,8 @@ impl CurveEditor {
             let center = to_screen(*x, *y);
             let active = self.selected == Some(index) || self.drag == Some(index);
             let radius = if active { 6.5 } else { 5.0 };
-            painter.circle_filled(center, radius, palette.accent);
-            painter.circle_stroke(center, radius, Stroke::new(1.5_f32, Color32::WHITE));
+            clipped.circle_filled(center, radius, palette.accent);
+            clipped.circle_stroke(center, radius, Stroke::new(1.5_f32, Color32::WHITE));
         }
 
         // 选中点的数值气泡
@@ -346,6 +528,13 @@ impl CurveEditor {
         }
 
         changed
+    }
+}
+
+fn default_noise(kind: CurveKind) -> f64 {
+    match kind {
+        CurveKind::Pace => 8.0,
+        CurveKind::Altitude => 3.0,
     }
 }
 

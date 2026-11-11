@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿//! 应用主界面：顶部栏 + 两个标签（跑步 / 运动记录）+ 各种弹窗。
+//! 应用主界面：顶部栏 + 两个标签（跑步 / 运动记录）+ 各种弹窗。
 //!
 //! 设计原则：极简、双层信息（主界面只留入口，配置全部收进弹窗）。
 
@@ -279,10 +279,13 @@ impl App {
         self.official.username.clear();
         self.official.password.clear();
         self.official.error = None;
+        self.official.open = false;
+        self.official.busy = false;
         self.records = RecordsUi::default();
         crate::api::model::clear_session();
         crate::api::model::clear_points_cache();
         self.log.push("已退出官方账号");
+        self.toast("已退出官方账号");
     }
 
     pub fn upload_logs(&mut self) {

@@ -1,4 +1,4 @@
-﻿//! 跑步主页与跑步弹窗。
+//! 跑步主页与跑步弹窗。
 //!
 //! 主界面只保留一个入口；「选路网 → 预览 → 编辑轮廓 → 参数 → 运行 → 完成」
 //! 全部收在弹窗里，避免把繁杂配置暴露给新用户。
@@ -845,9 +845,25 @@ fn draw_params(app: &mut App, ui: &mut egui::Ui) {
     ui.add_space(8.0);
     curve::section_label(ui, &palette, "配速曲线");
     ui.label(dim(
-        "纵轴为配速（越低越快）。拖动圆点调整；双击空白加点；右键点删除。",
+        "纵轴为配速（越低越快）。拖动圆点调整；双击空白加点；右键点删除；滚轮缩放、拖动空白平移。",
         &palette,
     ));
+    ui.add(
+        egui::Slider::new(&mut app.run.pace_curve.noise_amp, 0.0..=30.0)
+            .step_by(0.5)
+            .text("噪声幅度 ±秒/公里"),
+    );
+    ui.horizontal(|ui| {
+        if theme::ghost_button(ui, &palette, "生成噪声").clicked() {
+            app.run.pace_curve.apply_noise();
+        }
+        if theme::ghost_button(ui, &palette, "均匀排布").clicked() {
+            app.run.pace_curve.redistribute();
+        }
+        if theme::ghost_button(ui, &palette, "重置视图").clicked() {
+            app.run.pace_curve.reset_view();
+        }
+    });
     app.run.pace_curve.draw(ui, &palette);
     if let Err(error) = app.run.pace_curve.validate() {
         ui.label(RichText::new(error).size(11.5).color(palette.err));
@@ -859,9 +875,25 @@ fn draw_params(app: &mut App, ui: &mut egui::Ui) {
     ui.add_space(8.0);
     curve::section_label(ui, &palette, "海拔曲线");
     ui.label(dim(
-        "纵轴为海拔（米）。起终点建议回到同一高度，更接近真实闭环路线。",
+        "纵轴为海拔（米）。起终点建议回到同一高度，更接近真实闭环路线；滚轮缩放、拖动空白平移。",
         &palette,
     ));
+    ui.add(
+        egui::Slider::new(&mut app.run.altitude_curve.noise_amp, 0.0..=20.0)
+            .step_by(0.5)
+            .text("噪声幅度 ±米"),
+    );
+    ui.horizontal(|ui| {
+        if theme::ghost_button(ui, &palette, "生成噪声").clicked() {
+            app.run.altitude_curve.apply_noise();
+        }
+        if theme::ghost_button(ui, &palette, "均匀排布").clicked() {
+            app.run.altitude_curve.redistribute();
+        }
+        if theme::ghost_button(ui, &palette, "重置视图").clicked() {
+            app.run.altitude_curve.reset_view();
+        }
+    });
     app.run.altitude_curve.draw(ui, &palette);
     if let Err(error) = app.run.altitude_curve.validate() {
         ui.label(RichText::new(error).size(11.5).color(palette.err));

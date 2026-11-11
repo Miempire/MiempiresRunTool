@@ -344,6 +344,11 @@ pub fn save_session(s: &Session) -> Result<(), String> {
 
 pub fn clear_session() {
     crate::secure_store::remove("session.json");
+    // 删除失败时用空内容覆盖：避免重启后旧会话被读回，表现为「退登后仍是登录状态」。
+    if crate::secure_store::exists("session.json") {
+        let _ = crate::secure_store::write_bytes("session.json", b"");
+        crate::secure_store::remove("session.json");
+    }
 }
 
 pub fn load_config() -> Config {
