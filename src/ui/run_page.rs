@@ -853,6 +853,11 @@ fn draw_params(app: &mut App, ui: &mut egui::Ui) {
             .step_by(0.5)
             .text("噪声幅度 ±秒/公里"),
     );
+    ui.add(
+        egui::Slider::new(&mut app.run.pace_curve.noise_points, 5..=64)
+            .step_by(1.0)
+            .text("噪声点数"),
+    );
     ui.horizontal(|ui| {
         if theme::ghost_button(ui, &palette, "生成噪声").clicked() {
             app.run.pace_curve.apply_noise();
@@ -882,6 +887,11 @@ fn draw_params(app: &mut App, ui: &mut egui::Ui) {
         egui::Slider::new(&mut app.run.altitude_curve.noise_amp, 0.0..=20.0)
             .step_by(0.5)
             .text("噪声幅度 ±米"),
+    );
+    ui.add(
+        egui::Slider::new(&mut app.run.altitude_curve.noise_points, 5..=64)
+            .step_by(1.0)
+            .text("噪声点数"),
     );
     ui.horizontal(|ui| {
         if theme::ghost_button(ui, &palette, "生成噪声").clicked() {

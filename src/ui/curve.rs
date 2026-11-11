@@ -50,6 +50,8 @@ pub struct CurveEditor {
     pub y_max: f64,
     /// 噪声幅度（配速：秒/公里；海拔：米）。
     pub noise_amp: f64,
+    /// 噪声生成时铺的控制点个数（越少越好拖，越多起伏越细）。
+    pub noise_points: usize,
     pub selected: Option<usize>,
     drag: Option<usize>,
     /// 纵轴视窗中心与跨度（放大/平移后的可见区间）。
@@ -79,6 +81,7 @@ impl CurveEditor {
             y_min,
             y_max,
             noise_amp: default_noise(kind),
+            noise_points: DEFAULT_NOISE_POINTS,
             selected: None,
             drag: None,
             view_center: (y_min + y_max) * 0.5,
@@ -94,6 +97,7 @@ impl CurveEditor {
             y_min: min_sec - 10.0,
             y_max: max_sec + 10.0,
             noise_amp: default_noise(CurveKind::Pace),
+            noise_points: DEFAULT_NOISE_POINTS,
             selected: None,
             drag: None,
             view_center: (min_sec + max_sec) * 0.5,
@@ -109,6 +113,7 @@ impl CurveEditor {
             y_min: base - 25.0,
             y_max: base + 25.0,
             noise_amp: default_noise(CurveKind::Altitude),
+            noise_points: DEFAULT_NOISE_POINTS,
             selected: None,
             drag: None,
             view_center: base,
@@ -207,7 +212,7 @@ impl CurveEditor {
             return;
         }
         let (kind_min, kind_max) = self.kind.range();
-        let count = 33usize;
+        let count = self.noise_points.clamp(5, 64);
         let mut rng = rand::thread_rng();
         let base: Vec<(f64, f64)> = (0..count)
             .map(|index| {
@@ -530,6 +535,9 @@ impl CurveEditor {
         changed
     }
 }
+
+/// 噪声默认铺点个数。
+const DEFAULT_NOISE_POINTS: usize = 33;
 
 fn default_noise(kind: CurveKind) -> f64 {
     match kind {
