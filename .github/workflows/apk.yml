@@ -114,7 +114,17 @@ jobs:
           export CC_aarch64_linux_android="$NDK_BIN/${TARGET}26-clang"
           export AR_aarch64_linux_android="$NDK_BIN/llvm-ar"
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS='-C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,-z,common-page-size=16384'
-          cargo build --release --target "$TARGET" --features android --lib
+          set -o pipefail
+          cargo build --release --target "$TARGET" --features android --lib 2>&1 | tee "$RUNNER_TEMP/cargo.log"
+
+      - name: 输出编译错误（失败时）
+        if: failure()
+        run: |
+          log="$RUNNER_TEMP/cargo.log"
+          [ -f "$log" ] || exit 0
+          grep -E "^error(\[|:)|^  -->|^\s+-->|^warning: unused" "$log" | head -30 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
 
       - name: ELF 16KB 对齐检查
         run: |
