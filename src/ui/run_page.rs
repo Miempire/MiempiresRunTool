@@ -802,8 +802,8 @@ fn draw_params(app: &mut App, ui: &mut egui::Ui) {
     ));
     ui.add_space(4.0);
     ui.add(
-        egui::Slider::new(&mut app.run.distance_km, 0.5..=21.0)
-            .step_by(0.5)
+        egui::Slider::new(&mut app.run.distance_km, 0.5..=42.0)
+            .step_by(0.01)
             .text("距离 (km)"),
     );
     ui.add(
