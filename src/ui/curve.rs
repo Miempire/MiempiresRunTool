@@ -62,18 +62,17 @@ pub struct CurveEditor {
 
 impl CurveEditor {
     pub fn new(kind: CurveKind, points: Vec<(f64, f64)>, y_min: f64, y_max: f64) -> Self {
-        let valid = points.len() >= 2
-            && points.windows(2).all(|pair| pair[1].0 > pair[0].0)
-            && points
-                .iter()
-                .all(|(x, y)| x.is_finite() && y.is_finite() && (0.0..=1.0).contains(x));
+        let valid = points.is_empty()
+            || (points.len() >= 2
+                && points.windows(2).all(|pair| pair[1].0 > pair[0].0)
+                && points
+                    .iter()
+                    .all(|(x, y)| x.is_finite() && y.is_finite() && (0.0..=1.0).contains(x)));
         let points = if valid {
             points
         } else {
-            match kind {
-                CurveKind::Pace => default_pace(y_min, y_max),
-                CurveKind::Altitude => default_altitude((y_min + y_max) * 0.5),
-            }
+            // 无效点 → 放弃（返回空 Vec 表示不启用曲线）
+            Vec::new()
         };
         Self {
             kind,
@@ -93,7 +92,7 @@ impl CurveEditor {
     pub fn default_pace(min_sec: f64, max_sec: f64) -> Self {
         Self {
             kind: CurveKind::Pace,
-            points: default_pace(min_sec - 10.0, max_sec + 10.0),
+            points: Vec::new(), // 默认空曲线：不走曲线路径，跟原版 generator 一致
             y_min: min_sec - 10.0,
             y_max: max_sec + 10.0,
             noise_amp: default_noise(CurveKind::Pace),
@@ -109,7 +108,7 @@ impl CurveEditor {
     pub fn default_altitude(base: f64) -> Self {
         Self {
             kind: CurveKind::Altitude,
-            points: default_altitude(base),
+            points: Vec::new(), // 默认空曲线：不走曲线路径，跟原版 generator 一致
             y_min: base - 25.0,
             y_max: base + 25.0,
             noise_amp: default_noise(CurveKind::Altitude),
@@ -124,10 +123,7 @@ impl CurveEditor {
 
     /// 重置为默认形状（保留当前坐标范围）。
     pub fn reset(&mut self) {
-        self.points = match self.kind {
-            CurveKind::Pace => default_pace(self.y_min, self.y_max),
-            CurveKind::Altitude => default_altitude((self.y_min + self.y_max) * 0.5),
-        };
+        self.points = Vec::new(); // 重置为空曲线
         self.selected = None;
         self.drag = None;
         self.reset_view();
@@ -274,6 +270,9 @@ impl CurveEditor {
     }
 
     pub fn validate(&self) -> Result<(), String> {
+        if self.points.is_empty() {
+            return Ok(()); // 空曲线表示不启用，跳过校验
+        }
         let (min_y, max_y) = self.kind.range();
         validate_curve(&self.points, min_y, max_y, self.kind.title())
     }

@@ -143,7 +143,7 @@ impl RunUi {
             progress_text: String::new(),
             result: None,
             pending_start: false,
-            distance_km: settings.last_dist_km.clamp(0.5, 21.0),
+            distance_km: settings.last_dist_km.clamp(0.5, 42.0),
             pace_sec,
             pace_min,
             pace_max,
